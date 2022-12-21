@@ -1,0 +1,12 @@
+# the name of the package to fins the launch file in, if launching with CLI format
+string package
+# the name of the launch file or the full path to the launch file
+string launch_file
+
+---
+# did the launch file successfully start? if not error is populated
+bool started
+string error
+
+# the id # for the specific launch file if the launch was sucessfully started
+LaunchID formed_launch

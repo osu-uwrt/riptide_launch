@@ -1,0 +1,4 @@
+# this shares the same value set as LaunchID status
+uint8 status
+---
+int16 pid

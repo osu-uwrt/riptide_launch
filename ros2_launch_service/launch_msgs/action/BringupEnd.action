@@ -1,0 +1,8 @@
+# Request
+int32 pid
+---
+# Result 
+---
+# Feedback
+int32 killed_nodes
+int32 expected_killed_nodes

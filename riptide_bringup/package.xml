@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>riptide_bringup2</name>
+  <version>0.0.18</version>
+  <description>System bringup for OSU's Riptide AUV.</description>
+
+  <author email="justice.251@osu.edu">Benji Justice</author>
+  <author email="cary.42@osu.edu">Conor Cary</author>
+
+  <url type="website">http://go.osu.edu/uwrt</url>
+  <url type="repository">http://github.com/osu-uwrt/riptide</url>
+
+  <maintainer email="tucker.737@osu.edu">Cole Tucker</maintainer>
+  <license>BSD</license>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <depend>riptide_SINB</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
