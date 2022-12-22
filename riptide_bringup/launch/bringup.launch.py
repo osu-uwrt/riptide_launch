@@ -22,7 +22,7 @@ ns_launch_files = [
         'launch',
         'controller.launch.py'),
     os.path.join(
-        get_package_share_directory('riptide_localization2'),
+        get_package_share_directory('riptide_hardware2'),
         'launch',
         'navigation.launch.py'),
     os.path.join(
@@ -36,22 +36,9 @@ ns_launch_files = [
     os.path.join(
         get_package_share_directory('riptide_autonomy2'),
         'launch',
-        'autonomy.launch.py') ]
-'''
-    os.path.join(
-        get_package_share_directory('riptide_vision2'),
-        'launch',
-        'vision.launch.py'
-    )
-    os.path.join(
-        get_package_share_directory('riptide_navigation2'),
-        'launch',
-        'navigation.launch.py'),
-    os.path.join(
-        get_package_share_directory('riptide_autonomy2'),
-        'launch',
-        'actions.launch.py')
-]'''
+        'autonomy.launch.py') 
+]
+
 
 def generate_launch_description():
     # read the parameter for robot name

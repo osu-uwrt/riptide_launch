@@ -22,7 +22,7 @@ ns_launch_files = [
         'launch',
         'controller.launch.py'),
     os.path.join(
-        get_package_share_directory('riptide_localization2'),
+        get_package_share_directory('riptide_hardware2'),
         'launch',
         'fake_nav.launch.py'),
     os.path.join(
