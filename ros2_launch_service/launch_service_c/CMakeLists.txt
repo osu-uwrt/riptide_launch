@@ -16,9 +16,6 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(rclcpp REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
 
 add_executable(launch_service_c src/launch_service_c.cpp src/launch_manager_c.cpp)
 target_include_directories(launch_service_c PUBLIC

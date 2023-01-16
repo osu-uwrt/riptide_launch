@@ -15,14 +15,32 @@
 #include <launch_msgs/msg/list_launch.hpp>
 #include <launch_msgs/action/bringup_start.hpp>
 
+using namespace std::chrono_literals;
+
 namespace launch_manager {
+    class GenericSubCallback {
+    private: 
+        bool hasRecieved = false;
+        int pid = 0;
+    public:
+        GenericSubCallback(int childPid): pid(childPid) {};
+
+        void callback(std::shared_ptr<rclcpp::SerializedMessage> msg);
+
+        bool hasRecievedData() {return hasRecieved;};
+
+    };
+
     class LaunchManager: public rclcpp::Node {
     private:
         // Map the PIDs of the launch files to the tuple of their required subscriptions and their status
-        std::map<int, std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, bool>>> bringup_listeners;
+        std::map<int, std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, std::shared_ptr<GenericSubCallback>>>> bringup_listeners;
 
         // string containing the system hostname
         std::string hostname;
+
+        // parameter values
+        std::chrono::seconds startup_timeout = 5s;
         
         // Action servers and services and topics
         rclcpp::Publisher<launch_msgs::msg::ListLaunch>::SharedPtr bringup_status;
@@ -44,3 +62,4 @@ namespace launch_manager {
         LaunchManager();
     };
 }
+
