@@ -54,12 +54,17 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         else
             packagePath = ament_index_cpp::get_package_share_directory(
                 goal_handle->get_goal()->launch_package) + "/launch";
+
+        // VERY IMPORTANT CALL -- need to remove signal handlers against
+        // the child otherwise we cannot sigint the child
+        rclcpp::uninstall_signal_handlers();
         
         // invoke the interpreter
         pybind11::scoped_interpreter guard{}; // start the interpreter and keep it alive
         pybind11::exec("from ros2launch.api import launch_a_launch_file"); // import the launch API
         std::string pyline = "launch_a_launch_file(launch_file_path='" + packagePath 
             + "/" + goal_handle->get_goal()->launch_file + "', launch_file_arguments=[])";
+
         pybind11::exec(pyline); // start the requested launch file
 
         std::cout << "Launch process Ended" << std::endl;
@@ -94,7 +99,7 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
             // create the Generic subscription and its counterpart info class
             auto genSubCb = std::make_shared<GenericSubCallback>(pid);
             auto genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos, 
-                std::bind(&GenericSubCallback::callback, std::ref(genSubCb), _1));
+                std::bind(&GenericSubCallback::callback, genSubCb, _1));
 
             // add it to the subscriptions list
             genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
@@ -140,7 +145,7 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
             RCLCPP_ERROR(get_logger(), "Unable to determine startup due to timeout. ABORTING!");
 
             // send the child pid a sigint and check to make sure it wasnt already dead
-            int err = kill(pid, SIGINT);
+            int err = kill(pid, SIGINT); 
             if(err == -1 && errno == ESRCH) {
                 RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
             }
