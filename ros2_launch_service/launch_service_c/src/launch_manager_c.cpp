@@ -69,6 +69,8 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
 
         std::cout << "Launch process Ended" << std::endl;
 
+        exit(0);
+
     } else {
         RCLCPP_INFO_STREAM(get_logger(), "Parent thread begin monitoring on PID " << pid);
         result->pid = pid;

@@ -40,7 +40,7 @@ namespace launch_manager {
         std::string hostname;
 
         // parameter values
-        std::chrono::seconds startup_timeout = 5s;
+        std::chrono::seconds startup_timeout = 30s;
         
         // Action servers and services and topics
         rclcpp::Publisher<launch_msgs::msg::ListLaunch>::SharedPtr bringup_status;
