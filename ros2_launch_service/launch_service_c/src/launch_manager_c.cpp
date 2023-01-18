@@ -38,8 +38,6 @@ rclcpp_action::CancelResponse LaunchManager::handle_bringup_cancel (const std::s
 }
 
 void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle) {    
-    auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
-
     // two processes at this point
     pid_t pid = fork();
 
@@ -58,6 +56,8 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         // VERY IMPORTANT CALL -- need to remove signal handlers against
         // the child otherwise we cannot sigint the child
         rclcpp::uninstall_signal_handlers();
+
+        // may need to also clear the ros data 
         
         // invoke the interpreter
         pybind11::scoped_interpreter guard{}; // start the interpreter and keep it alive
@@ -73,14 +73,11 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
 
     } else {
         RCLCPP_INFO_STREAM(get_logger(), "Parent thread begin monitoring on PID " << pid);
-        result->pid = pid;
-
-        // get the expected # of topics
-        int topicCount = goal_handle->get_goal()->topics.size();
 
         // work through each topic to make the list of topics to monitor
         std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, std::shared_ptr<GenericSubCallback>>> genSubscrip;
         for (auto topic : goal_handle->get_goal()->topics){
+
             // determine the QOS from the info we were given
             rclcpp::QoS genSubQos = rclcpp::SensorDataQoS(); 
             switch(topic.qos_type){
@@ -110,57 +107,82 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         // add the PID to the list of processes to track
         bringup_listeners.emplace(pid, genSubscrip);
 
-        // setup loop timeout and sleep time
-        rclcpp::Rate checkRate(1s);
-        auto startTime = get_clock()->now();
-        int recievedCount = 0;
-
-        // create the feedback message
-        auto fbMsg = std::make_shared<launch_msgs::action::BringupStart::Feedback>();
-        fbMsg->expected_topics = topicCount;
-
-        RCLCPP_INFO(get_logger(), "Launch entring monitoring state");
-
-        // begin startup monitoring here
-        while(startTime + startup_timeout > get_clock()->now()){
-            recievedCount = 0;
-
-            // figure out which of the subscribers we have data from and which we dont
-            for(auto subscrip : genSubscrip){
-                recievedCount += std::get<1>(subscrip)->hasRecievedData()? 1 : 0;
-            }
-
-            // fill out and send the feedback message with current status
-            fbMsg->completed_topics = recievedCount;
-            goal_handle->publish_feedback(fbMsg);
-
-            // check if the recieve count matches the expected count. if they do, bail the loop
-            if(recievedCount == topicCount)
-                break;
-
-            // sleep a bit
-            checkRate.sleep();
-        }
-
-        // check for a timeout vs a success
-        if(recievedCount != topicCount){
-            RCLCPP_ERROR(get_logger(), "Unable to determine startup due to timeout. ABORTING!");
-
-            // send the child pid a sigint and check to make sure it wasnt already dead
-            int err = kill(pid, SIGINT); 
-            if(err == -1 && errno == ESRCH) {
-                RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
-            }
-
-            // abort the action
-            goal_handle->abort(result);
-
-        } else {
-            RCLCPP_INFO(get_logger(), "Launch completed!");
-
-            goal_handle->succeed(result);
-        }
+        // now we can thread out to monitor the startup
+        auto action_thread_ = std::thread{std::bind(&LaunchManager::monitor_child_start, this, _1, _2), pid, goal_handle};
+        action_thread_.detach();
     }
+}
+
+void LaunchManager::monitor_child_start(
+    pid_t pid, const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle){
+
+    RCLCPP_INFO(get_logger(), "Launch entring monitoring state");
+
+    auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
+    result->pid = pid;
+
+    // get the expected # of topics
+    int topicCount = goal_handle->get_goal()->topics.size();
+
+    // setup loop timeout and sleep time
+    rclcpp::Rate checkRate(1s);
+    auto startTime = get_clock()->now();
+    int recievedCount = 0;
+
+    // create the feedback message
+    auto fbMsg = std::make_shared<launch_msgs::action::BringupStart::Feedback>();
+    fbMsg->expected_topics = topicCount;
+
+    // begin startup monitoring here
+    while(startTime + startup_timeout > get_clock()->now()){
+        recievedCount = 0;
+
+        // figure out which of the subscribers we have data from and which we dont
+        for(auto subscrip : bringup_listeners.at(pid)){
+            recievedCount += std::get<1>(subscrip)->hasRecievedData()? 1 : 0;
+        }
+
+        // fill out and send the feedback message with current status
+        fbMsg->completed_topics = recievedCount;
+        goal_handle->publish_feedback(fbMsg);
+
+        // check if the recieve count matches the expected count. if they do, bail the loop
+        if(recievedCount == topicCount)
+            break;
+
+        // sleep a bit
+        checkRate.sleep();
+    } 
+
+    // close out the subscribers and destroy them
+    for(auto subscrip : bringup_listeners.at(pid)){
+        // std::cout << std::get<0>(subscrip).use_count() << " " << std::get<1>(subscrip).use_count() << std::endl;
+
+        std::get<0>(subscrip).reset();
+        std::get<1>(subscrip).reset();
+
+        // std::cout << std::get<0>(subscrip).use_count() << " " << std::get<1>(subscrip).use_count() << std::endl;
+    }
+
+
+    // check for a timeout vs a success
+    if(recievedCount != topicCount){
+        RCLCPP_ERROR(get_logger(), "Unable to determine startup due to timeout. ABORTING!");
+
+        // send the child pid a sigint and check to make sure it wasnt already dead
+        int err = kill(pid, SIGINT); 
+        if(err == -1 && errno == ESRCH) {
+            RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
+        }
+
+        // abort the action
+        goal_handle->abort(result);
+
+    } else {
+        RCLCPP_INFO(get_logger(), "Launch completed!");
+
+        goal_handle->succeed(result);
+    } 
 }
 
 void LaunchManager::pub_timer_callback(){
@@ -207,5 +229,5 @@ const std::string LaunchManager::get_hostname(){
 
 void GenericSubCallback::callback(std::shared_ptr<rclcpp::SerializedMessage> msg){
     hasRecieved = true;
-    std::cout << "got data" << std::endl;
+    // std::cout << "got data in pid " << getpid() << std::endl;
 }

@@ -56,6 +56,7 @@ namespace launch_manager {
 
         // helper functions
         const std::string get_hostname();
+        void monitor_child_start(pid_t child, const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle);
 
         // Some form of XML document that contains relivent 
     public:
