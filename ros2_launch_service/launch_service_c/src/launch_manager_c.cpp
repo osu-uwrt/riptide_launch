@@ -21,6 +21,12 @@ LaunchManager::LaunchManager() : Node("launch_manager"){
       std::bind(&LaunchManager::handle_bringup_accepted, this, _1));
 
     // create the action server to stop things
+    bringup_end = rclcpp_action::create_server<launch_msgs::action::BringupEnd>(
+        this,
+        hostname + "/bringup_end",
+        std::bind(&LaunchManager::handle_end_goal, this, _1, _2),
+        std::bind(&LaunchManager::handle_end_cancel, this, _1),
+        std::bind(&LaunchManager::handle_end_accepted, this, _1));
 
     // create the alive topic
     bringup_status = create_publisher<launch_msgs::msg::ListLaunch>(hostname + "/launch_status", rclcpp::SystemDefaultsQoS());
@@ -68,7 +74,7 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         pybind11::exec(pyline); // start the requested launch file
 
         std::cout << "Launch process Ended" << std::endl;
-
+        rclcpp::shutdown();
         exit(0);
 
     } else {
@@ -183,6 +189,44 @@ void LaunchManager::monitor_child_start(
 
         goal_handle->succeed(result);
     } 
+}
+
+rclcpp_action::GoalResponse LaunchManager::handle_end_goal (const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const launch_msgs::action::BringupEnd::Goal> goal) {
+    // Ensure PID is within the bringup_listeners before accepting
+    if (bringup_listeners.find(goal->pid) != bringup_listeners.end()) {
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    } else {
+        RCLCPP_ERROR(get_logger(), "Process with PID %d is not a child of the launch monitor. Rejecting goal. . .", goal->pid);
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+}
+
+rclcpp_action::CancelResponse LaunchManager::handle_end_cancel (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupEnd>> goal_handle) {
+    // The processes are already finishing. No time to change your mind now.
+    RCLCPP_WARN(get_logger(), "Rejecting cancellation of bringup_end goal for process with PID %d.", goal_handle->get_goal()->pid);
+    return rclcpp_action::CancelResponse::REJECT;
+}
+
+void LaunchManager::handle_end_accepted (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupEnd>> goal_handle) {
+    // Signal process to close
+    int pid = goal_handle->get_goal()->pid;
+    auto result = std::make_shared<launch_msgs::action::BringupEnd_Result>();
+
+    RCLCPP_DEBUG(get_logger(), "Killing process with PID %d. . .", pid);
+    int err = kill(pid, SIGINT);
+    
+    if (err == -1) {
+        if (errno == ESRCH) {
+            RCLCPP_ERROR(get_logger(), "Process with PID %d does not exist or is already terminating.", pid);
+            goal_handle->abort(result);
+        } else if (errno == EPERM) {
+            RCLCPP_ERROR(get_logger(), "The monitor has no permission to kill process with PID %d.", pid);
+            goal_handle->abort(result);
+        }
+    } else {
+        bringup_listeners.erase(pid);
+        goal_handle->succeed(result);
+    }
 }
 
 void LaunchManager::pub_timer_callback(){

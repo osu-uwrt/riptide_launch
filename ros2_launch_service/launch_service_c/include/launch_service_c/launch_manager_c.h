@@ -48,10 +48,16 @@ namespace launch_manager {
         rclcpp_action::Server<launch_msgs::action::BringupStart>::SharedPtr bringup_start;
         rclcpp::TimerBase::SharedPtr publish_timer;
 
-        // Binding methods
+        // Binding methods for bringup_start server
         rclcpp_action::GoalResponse handle_bringup_goal (const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const launch_msgs::action::BringupStart::Goal> goal);
         rclcpp_action::CancelResponse handle_bringup_cancel (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle);
         void handle_bringup_accepted (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle);
+        
+        // Binding methods for bringup_end server
+        rclcpp_action::GoalResponse handle_end_goal (const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const launch_msgs::action::BringupEnd::Goal> goal);
+        rclcpp_action::CancelResponse handle_end_cancel (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupEnd>> goal_handle);
+        void handle_end_accepted (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupEnd>> goal_handle);
+        
         void pub_timer_callback();
 
         // helper functions
