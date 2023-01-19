@@ -17,7 +17,7 @@
 
 <!-- 
 example test command:
-ros2 action send_goal /<machine>/bringup_start launch_msgs/action/BringupStart "{launch_file: 'dummy_robot_bringup.launch.py', launch_package: 'dummy_robot_bringup', topics:[{ name: '/joint_state', type_name: 'sensor_msgs/msg/JointState', qos_type: 0}]}"
+ros2 action send_goal /<machine>/bringup_start launch_msgs/action/BringupStart "{launch_file: 'dummy_robot_bringup.launch.py', launch_package: 'dummy_robot_bringup', topics:[{ name: '/joint_states', type_name: 'sensor_msgs/msg/JointState', qos_type: 0}]}"
 
 like this:
 ros2 action send_goal /coalman321_QEMU_Virtual_Machine/bringup_start launch_msgs/action/BringupStart "{launch_file: 'dummy_robot_bringup.launch.py', launch_package: 'dummy_robot_bringup', topics:[{ name: '/joint_states', type_name: 'sensor_msgs/msg/JointState', qos_type: 0}]}"
