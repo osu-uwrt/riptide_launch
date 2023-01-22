@@ -17,6 +17,12 @@
 
 using namespace std::chrono_literals;
 
+
+// Flag passed to process to tell it that it's a child process and should execute a python shell
+const std::string SUPER_SECRET_FLAG = "--exec-python-from-child-super-secret-no-backsies";
+// Execute python. Must be called ONLY in the child process
+void exec_python(const char * const launch_path);
+
 namespace launch_manager {
     class GenericSubCallback {
     private: 

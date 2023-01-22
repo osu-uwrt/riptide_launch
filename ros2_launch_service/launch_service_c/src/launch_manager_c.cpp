@@ -1,4 +1,5 @@
 #include "launch_service_c/launch_manager_c.h"
+#include <filesystem>
 
 #define MAX_HOST_LEN 300
 
@@ -51,31 +52,24 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
     if(pid == 0) {
         RCLCPP_INFO(get_logger(), "Child thread starting");
 
-        // create the package path
+        // create the launch path
         std::string packagePath;
         if(goal_handle->get_goal()->launch_package.find('/') != std::string::npos)
             packagePath = goal_handle->get_goal()->launch_package;
         else
             packagePath = ament_index_cpp::get_package_share_directory(
                 goal_handle->get_goal()->launch_package) + "/launch";
-
-        // VERY IMPORTANT CALL -- need to remove signal handlers against
-        // the child otherwise we cannot sigint the child
-        rclcpp::uninstall_signal_handlers();
-
-        // may need to also clear the ros data 
         
-        // invoke the interpreter
-        pybind11::scoped_interpreter guard{}; // start the interpreter and keep it alive
-        pybind11::exec("from ros2launch.api import launch_a_launch_file"); // import the launch API
-        std::string pyline = "launch_a_launch_file(launch_file_path='" + packagePath 
-            + "/" + goal_handle->get_goal()->launch_file + "', launch_file_arguments=[])";
+        std::string launchPath = packagePath + "/" + goal_handle->get_goal()->launch_file;
 
-        pybind11::exec(pyline); // start the requested launch file
+        // If this call succeeds, it should never return.        
+        int err = execl("/proc/self/exe", SUPER_SECRET_FLAG.c_str(), launchPath.c_str(), NULL);
 
-        std::cout << "Launch process Ended" << std::endl;
-        rclcpp::shutdown();
-        exit(0);
+        // execl failed. Print fatal error, abort the child
+        if (err = -1) {
+            RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));    
+        }
+        std::abort();
 
     } else {
         RCLCPP_INFO_STREAM(get_logger(), "Parent thread begin monitoring on PID " << pid);
@@ -117,6 +111,16 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         auto action_thread_ = std::thread{std::bind(&LaunchManager::monitor_child_start, this, _1, _2), pid, goal_handle};
         action_thread_.detach();
     }
+}
+
+void exec_python(const char * const launch_path) {
+    pybind11::scoped_interpreter guard{}; // start the interpreter and keep it alive
+    pybind11::exec("from ros2launch.api import launch_a_launch_file"); // import the launch API
+    std::string pyline = "launch_a_launch_file(launch_file_path='" + std::string(launch_path) + "', launch_file_arguments=[])";
+
+    pybind11::exec(pyline); // start the requested launch file
+
+    std::cout << "Launch file \"" << launch_path << "\" Ended" << std::endl;
 }
 
 void LaunchManager::monitor_child_start(
