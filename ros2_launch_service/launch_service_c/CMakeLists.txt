@@ -6,6 +6,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # find dependencies
+find_package(pybind11_vendor REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp_action REQUIRED)
