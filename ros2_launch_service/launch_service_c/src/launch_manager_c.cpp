@@ -234,6 +234,25 @@ void LaunchManager::handle_end_accepted (const std::shared_ptr<rclcpp_action::Se
 }
 
 void LaunchManager::pub_timer_callback(){
+    auto it = bringup_listeners.begin();
+    while (it != bringup_listeners.end()) {
+        // Check for existance of process
+        int pid = it->first;
+        int err = kill(pid, 0);
+
+        if (err == -1) {
+            if (errno == EPERM) {
+                RCLCPP_ERROR(get_logger(), "Parent process has no permission to remove child process %d.", pid);
+            } else if (errno == ESRCH) {
+                RCLCPP_INFO(get_logger(), "Child process %d has died.", pid);
+                // Erase and get next element
+                it = bringup_listeners.erase(it);
+            }
+        } else {
+            ++it;
+        }
+    }
+
     // check for subscribers before doing any of this work
     // if no subscribers, dont publish
     if(bringup_status->get_subscription_count() == 0)
