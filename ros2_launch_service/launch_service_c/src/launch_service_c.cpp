@@ -1,4 +1,6 @@
 #include <fstream>
+#include <csignal>
+
 #include "launch_service_c/launch_manager_c.h"
 
 int main(int argc, char ** argv)
@@ -35,6 +37,14 @@ int main(int argc, char ** argv)
       exit(EXIT_FAILURE);
     }
   } else {
+
+    // Ignore SIGCHLD signals, so the child completely dies without much of a fuss.
+    struct sigaction sigchld_ignore;
+    sigchld_ignore.sa_handler = SIG_IGN;
+    sigchld_ignore.sa_flags = 0; // or SA_RESTART
+    sigemptyset(&sigchld_ignore.sa_mask);
+    sigaction(SIGCHLD, &sigchld_ignore, NULL);
+
     // PARENT PROCESS
     // init ros node
     std::cout << "Starting parent. . .\n";
