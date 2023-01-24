@@ -63,12 +63,10 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         std::string launchPath = packagePath + "/" + goal_handle->get_goal()->launch_file;
 
         // If this call succeeds, it should never return.        
-        int err = execl("/proc/self/exe", SUPER_SECRET_FLAG.c_str(), launchPath.c_str(), NULL);
+        execl("/proc/self/exe", SUPER_SECRET_FLAG.c_str(), launchPath.c_str(), NULL);
 
         // execl failed. Print fatal error, abort the child
-        if (err = -1) {
-            RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));    
-        }
+        RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));    
         std::abort();
 
     } else {
