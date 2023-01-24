@@ -3,6 +3,30 @@
 
 #include "launch_service_c/launch_manager_c.h"
 
+#define MAX_HOST_LEN 300
+
+const std::string get_hostname()
+{
+    // retrieve the system hostname in hopefully MAX_HOST_LEN characters -1 for null term
+    char hostCstr[MAX_HOST_LEN];
+    gethostname(hostCstr, MAX_HOST_LEN);
+    
+    std::string hostnameInternal(hostCstr);
+
+    // make sure we have a null termination
+    if(hostnameInternal.length() >= MAX_HOST_LEN){
+        hostnameInternal = "unknown_host";
+        std::cerr << "Failed to discover system hostname, falling back to default, " << hostnameInternal;
+    } else {
+        // replace the dashes with underscores, because the spec doesnt like dashes
+        std::replace(hostnameInternal.begin(), hostnameInternal.end(), '-', '_');
+    }
+
+    // kinda important.... without this strings raise a bad_alloc
+    return hostnameInternal;
+}
+
+
 int main(int argc, char ** argv)
 {
   // Look for super secret flag to see if this is a child process
@@ -51,7 +75,7 @@ int main(int argc, char ** argv)
     rclcpp::init(argc, argv);
 
     // Create the node and spin it 
-    auto driver = std::make_shared<launch_manager::LaunchManager>();
+    auto driver = std::make_shared<launch_manager::LaunchManager>(get_hostname());
     rclcpp::spin(driver);
 
     // the node has ben called to shutdown, so rclcpp needs to be shut down as well

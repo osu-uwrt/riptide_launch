@@ -1,15 +1,11 @@
 #include "launch_service_c/launch_manager_c.h"
 #include <filesystem>
 
-#define MAX_HOST_LEN 300
-
 using namespace launch_manager;
 using namespace std::placeholders;
 using namespace std::chrono_literals;
 
-LaunchManager::LaunchManager() : Node("launch_manager"){
-    
-    hostname = get_hostname();
+LaunchManager::LaunchManager(const std::string &hostname) : Node(hostname + "_launch_manager"){
 
     RCLCPP_INFO_STREAM(get_logger(), "Binding to hostname '" << hostname << "'");
 
@@ -270,26 +266,6 @@ void LaunchManager::pub_timer_callback(){
 
     // send the status
     bringup_status->publish(launchesMsg);
-}
-
-const std::string LaunchManager::get_hostname(){
-    // retrieve the system hostname in hopefully MAX_HOST_LEN characters -1 for null term
-    char hostCstr[MAX_HOST_LEN];
-    ::gethostname(hostCstr, MAX_HOST_LEN);
-    
-    std::string hostnameInternal(hostCstr);
-
-    // make sure we have a null termination
-    if(hostnameInternal.length() >= MAX_HOST_LEN){
-        hostnameInternal = "unknown_host";
-        RCLCPP_WARN_STREAM(get_logger(), "Failed to discover system hostname, falling back to default, " << hostnameInternal);
-    } else {
-        // replace the dashes with underscores, because the spec doesnt like dashes
-        std::replace(hostnameInternal.begin(), hostnameInternal.end(), '-', '_');
-    }
-
-    // kinda important.... without this strings raise a bad_alloc
-    return hostnameInternal;
 }
 
 void GenericSubCallback::callback(std::shared_ptr<rclcpp::SerializedMessage> msg){
