@@ -33,7 +33,7 @@ ns_launch_files = [
         "snib.launch.py"
     ),
     os.path.join(
-        get_package_share_directory('riptide_localization2'),
+        get_package_share_directory('riptide_hardware2'),
         'launch',
         'navigation.launch.py'
     ),
