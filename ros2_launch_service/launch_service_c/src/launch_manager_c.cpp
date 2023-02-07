@@ -253,7 +253,7 @@ void LaunchManager::pub_timer_callback(){
         return;
 
     // create the vector of pids and resize it correctly
-    std::vector<int16_t> pidList;
+    std::vector<int> pidList;
     pidList.reserve(bringup_listeners.size());
 
     // get the list of PIDs
