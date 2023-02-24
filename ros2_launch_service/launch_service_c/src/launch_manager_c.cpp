@@ -1,5 +1,6 @@
 #include "launch_service_c/launch_manager_c.h"
 #include <filesystem>
+#include <sstream>
 
 using namespace launch_manager;
 using namespace std::placeholders;
@@ -58,8 +59,31 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         
         std::string launchPath = packagePath + "/" + goal_handle->get_goal()->launch_file;
 
-        // If this call succeeds, it should never return.        
-        execl("/proc/self/exe", SUPER_SECRET_FLAG.c_str(), launchPath.c_str(), NULL);
+        std::vector<std::string> arg_keys = goal_handle->get_goal()->arg_keys;
+        std::vector<std::string> arg_values = goal_handle->get_goal()->arg_values;
+
+        std::vector<std::string> argList;
+
+        argList.push_back("launch_service_c");
+        argList.push_back(SUPER_SECRET_FLAG);
+        argList.push_back(launchPath.c_str());
+
+        for (size_t i = 0; i < goal_handle->get_goal()->arg_keys.size(); ++i) {
+            const std::string argument = arg_keys[i] + ":=" + arg_values[i];
+            argList.push_back(argument);
+        }
+
+        std::vector<const char *> cstrings;
+        cstrings.reserve(argList.size());
+
+        for(size_t i = 0; i < argList.size(); ++i) {
+            cstrings.push_back(argList[i].c_str());
+        }
+
+        cstrings.push_back(nullptr);
+
+        // If this call succeeds, it should never return.
+        execv("/proc/self/exe", const_cast<char *const*>(cstrings.data()));
 
         // execl failed. Print fatal error, abort the child
         RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));    
@@ -107,10 +131,19 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
     }
 }
 
-void exec_python(const char * const launch_path) {
+void exec_python(const char * const launch_path, std::vector<std::string> launch_args) {
+    std::ostringstream launch_arg_python;
+
+    if (launch_args.size() > 0) {
+        launch_arg_python << "\"" << launch_args[0] << "\"";
+        for (size_t i = 1; i < launch_args.size(); ++i) {
+            launch_arg_python << ", \"" << launch_args[i] << "\"";
+        }
+    }
+
     pybind11::scoped_interpreter guard{}; // start the interpreter and keep it alive
     pybind11::exec("from ros2launch.api import launch_a_launch_file"); // import the launch API
-    std::string pyline = "launch_a_launch_file(launch_file_path='" + std::string(launch_path) + "', launch_file_arguments=[])";
+    std::string pyline = "launch_a_launch_file(launch_file_path='" + std::string(launch_path) + "', launch_file_arguments=[" + launch_arg_python.str() + "])";
 
     pybind11::exec(pyline); // start the requested launch file
 

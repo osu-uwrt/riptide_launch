@@ -48,8 +48,14 @@ int main(int argc, char ** argv)
       std::ifstream f(argv[child_flag_index + 1]);
 
       if (f.good()) {
+        // Create extra launch arguments
+        std::vector<std::string> launch_args;
+        for (size_t i = child_flag_index + 2; i < argc; ++i) {
+          launch_args.push_back(argv[i]);
+        }
+
         // Execute Python.
-        exec_python(argv[child_flag_index + 1]);
+        exec_python(argv[child_flag_index + 1], launch_args);
 
       } else {
         std::cerr << "File \"" << argv[child_flag_index + 1] << "\" does not exist.\n";

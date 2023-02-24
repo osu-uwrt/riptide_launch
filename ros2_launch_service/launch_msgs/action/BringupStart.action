@@ -3,6 +3,9 @@ string launch_file
 string launch_package
 
 TopicData[] topics
+
+string[] arg_keys
+string[] arg_values
 ---
 # Result
 int32 pid
