@@ -59,9 +59,9 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
         
         std::string launchPath = packagePath + "/" + goal_handle->get_goal()->launch_file;
 
+        // Get launch arguments
         std::vector<std::string> arg_keys = goal_handle->get_goal()->arg_keys;
         std::vector<std::string> arg_values = goal_handle->get_goal()->arg_values;
-
         std::vector<std::string> argList;
 
         argList.push_back("launch_service_c");
@@ -73,6 +73,8 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
             argList.push_back(argument);
         }
 
+        // We have to do some fancy conversions to pass the argument
+        // list to execl
         std::vector<const char *> cstrings;
         cstrings.reserve(argList.size());
 
