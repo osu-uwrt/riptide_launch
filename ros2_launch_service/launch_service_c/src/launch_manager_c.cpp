@@ -176,6 +176,12 @@ void LaunchManager::monitor_child_start(
     while(startTime + startup_timeout > get_clock()->now()){
         recievedCount = 0;
 
+        if (bringup_listeners.find(pid) == bringup_listeners.end()) {
+            RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
+            goal_handle->abort(result);
+            return;
+        }
+
         // figure out which of the subscribers we have data from and which we dont
         for(auto subscrip : bringup_listeners.at(pid)){
             recievedCount += std::get<1>(subscrip)->hasRecievedData()? 1 : 0;
