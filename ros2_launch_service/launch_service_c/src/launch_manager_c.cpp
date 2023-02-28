@@ -134,13 +134,13 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
                 // add it to the subscriptions list
                 genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
             } catch (ament_index_cpp::PackageNotFoundError e) {
-                RCLCPP_ERROR(get_logger(), "BringupStart message contains a topic from an unknown package: \"%s\"", e.package_name);
+                RCLCPP_ERROR(get_logger(), "BringupStart message contains a topic from an unknown package: \"%s\"", e.package_name.c_str());
                 auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
                 result->pid = pid;
                 goal_handle->abort(result);
                 return;
             } catch (std::runtime_error e) {
-                RCLCPP_ERROR(get_logger(), "Topic \"%s\" contains a non existant topic type: \"%s\"", topic.name, topic.type_name);
+                RCLCPP_ERROR(get_logger(), "Topic \"%s\" contains a non existant topic type: \"%s\"", topic.name.c_str(), topic.type_name.c_str());
                 auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
                 result->pid = pid;
                 goal_handle->abort(result);
