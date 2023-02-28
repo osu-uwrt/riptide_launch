@@ -21,7 +21,7 @@ using namespace std::chrono_literals;
 // Flag passed to process to tell it that it's a child process and should execute a python shell
 const std::string SUPER_SECRET_FLAG = "--exec-python-from-child-super-secret-no-backsies";
 // Execute python. Must be called ONLY in the child process
-void exec_python(const char * const launch_path);
+void exec_python(const char * const launch_path, const std::vector<std::string> launch_args);
 
 namespace launch_manager {
     class GenericSubCallback {
@@ -41,9 +41,6 @@ namespace launch_manager {
     private:
         // Map the PIDs of the launch files to the tuple of their required subscriptions and their status
         std::map<int, std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, std::shared_ptr<GenericSubCallback>>>> bringup_listeners;
-
-        // string containing the system hostname
-        std::string hostname;
 
         // parameter values
         std::chrono::seconds startup_timeout = 30s;
@@ -67,12 +64,11 @@ namespace launch_manager {
         void pub_timer_callback();
 
         // helper functions
-        const std::string get_hostname();
         void monitor_child_start(pid_t child, const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle);
 
         // Some form of XML document that contains relivent 
     public:
-        LaunchManager();
+        LaunchManager(const std::string &hostname);
     };
 }
 

@@ -4,7 +4,7 @@
   <name>launch_service</name>
   <version>1.0.0</version>
   <description>A ROS2 package for starting up launch files on remote stystems</description>
-  <maintainer email="coalman321@outlook.com">Cole Tucker</maintainer>
+  <maintainer email="tucker.737@osu.edu">Cole Tucker</maintainer>
   <license>Apache 2.0</license>
 
   <exec_depend>rclpy</exec_depend>

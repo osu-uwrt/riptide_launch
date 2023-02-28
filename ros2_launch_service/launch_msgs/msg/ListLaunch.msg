@@ -1,2 +1,2 @@
 # lists the current launches that are still running
-int16[] pids
+int32[] pids

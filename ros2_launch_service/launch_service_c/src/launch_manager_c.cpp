@@ -1,15 +1,14 @@
 #include "launch_service_c/launch_manager_c.h"
-#include <filesystem>
 
-#define MAX_HOST_LEN 300
+#include <ament_index_cpp/get_package_prefix.hpp>
+#include <filesystem>
+#include <sstream>
 
 using namespace launch_manager;
 using namespace std::placeholders;
 using namespace std::chrono_literals;
 
-LaunchManager::LaunchManager() : Node("launch_manager"){
-    
-    hostname = get_hostname();
+LaunchManager::LaunchManager(const std::string &hostname) : Node(hostname + "_launch_manager"){
 
     RCLCPP_INFO_STREAM(get_logger(), "Binding to hostname '" << hostname << "'");
 
@@ -54,21 +53,51 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
 
         // create the launch path
         std::string packagePath;
-        if(goal_handle->get_goal()->launch_package.find('/') != std::string::npos)
-            packagePath = goal_handle->get_goal()->launch_package;
-        else
-            packagePath = ament_index_cpp::get_package_share_directory(
-                goal_handle->get_goal()->launch_package) + "/launch";
+        try {
+            if(goal_handle->get_goal()->launch_package.find('/') != std::string::npos) {
+                packagePath = goal_handle->get_goal()->launch_package;
+            } else {
+                packagePath = ament_index_cpp::get_package_share_directory(
+                    goal_handle->get_goal()->launch_package) + "/launch";
+
+            }
+        } catch (ament_index_cpp::PackageNotFoundError e) {
+            // RCLCPP_ERROR is called from the parent, so the child can just die. 
+            std::abort();
+        }
         
         std::string launchPath = packagePath + "/" + goal_handle->get_goal()->launch_file;
 
-        // If this call succeeds, it should never return.        
-        int err = execl("/proc/self/exe", SUPER_SECRET_FLAG.c_str(), launchPath.c_str(), NULL);
+        // Get launch arguments
+        std::vector<std::string> arg_keys = goal_handle->get_goal()->arg_keys;
+        std::vector<std::string> arg_values = goal_handle->get_goal()->arg_values;
+        std::vector<std::string> argList;
+
+        argList.push_back("launch_service_c");
+        argList.push_back(SUPER_SECRET_FLAG);
+        argList.push_back(launchPath.c_str());
+
+        for (size_t i = 0; i < goal_handle->get_goal()->arg_keys.size(); ++i) {
+            const std::string argument = arg_keys[i] + ":=" + arg_values[i];
+            argList.push_back(argument);
+        }
+
+        // We have to do some fancy conversions to pass the argument
+        // list to execl
+        std::vector<const char *> cstrings;
+        cstrings.reserve(argList.size());
+
+        for(size_t i = 0; i < argList.size(); ++i) {
+            cstrings.push_back(argList[i].c_str());
+        }
+
+        cstrings.push_back(nullptr);
+
+        // If this call succeeds, it should never return.
+        execv("/proc/self/exe", const_cast<char *const*>(cstrings.data()));
 
         // execl failed. Print fatal error, abort the child
-        if (err = -1) {
-            RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));    
-        }
+        RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));    
         std::abort();
 
     } else {
@@ -96,12 +125,27 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
             }
 
             // create the Generic subscription and its counterpart info class
-            auto genSubCb = std::make_shared<GenericSubCallback>(pid);
-            auto genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos, 
-                std::bind(&GenericSubCallback::callback, genSubCb, _1));
-
-            // add it to the subscriptions list
-            genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
+            std::shared_ptr<GenericSubCallback> genSubCb;
+            rclcpp::GenericSubscription::SharedPtr genSub;
+            try {
+                genSubCb = std::make_shared<GenericSubCallback>(pid);
+                genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos, 
+                    std::bind(&GenericSubCallback::callback, genSubCb, _1));
+                // add it to the subscriptions list
+                genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
+            } catch (ament_index_cpp::PackageNotFoundError e) {
+                RCLCPP_ERROR(get_logger(), "BringupStart message contains a topic from an unknown package: \"%s\"", e.package_name);
+                auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
+                result->pid = pid;
+                goal_handle->abort(result);
+                return;
+            } catch (std::runtime_error e) {
+                RCLCPP_ERROR(get_logger(), "Topic \"%s\" contains a non existant topic type: \"%s\"", topic.name, topic.type_name);
+                auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
+                result->pid = pid;
+                goal_handle->abort(result);
+                return;
+            }
         }
 
         // add the PID to the list of processes to track
@@ -113,10 +157,19 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
     }
 }
 
-void exec_python(const char * const launch_path) {
+void exec_python(const char * const launch_path, std::vector<std::string> launch_args) {
+    std::ostringstream launch_arg_python;
+
+    if (launch_args.size() > 0) {
+        launch_arg_python << "\"" << launch_args[0] << "\"";
+        for (size_t i = 1; i < launch_args.size(); ++i) {
+            launch_arg_python << ", \"" << launch_args[i] << "\"";
+        }
+    }
+
     pybind11::scoped_interpreter guard{}; // start the interpreter and keep it alive
     pybind11::exec("from ros2launch.api import launch_a_launch_file"); // import the launch API
-    std::string pyline = "launch_a_launch_file(launch_file_path='" + std::string(launch_path) + "', launch_file_arguments=[])";
+    std::string pyline = "launch_a_launch_file(launch_file_path='" + std::string(launch_path) + "', launch_file_arguments=[" + launch_arg_python.str() + "])";
 
     pybind11::exec(pyline); // start the requested launch file
 
@@ -146,6 +199,12 @@ void LaunchManager::monitor_child_start(
     // begin startup monitoring here
     while(startTime + startup_timeout > get_clock()->now()){
         recievedCount = 0;
+
+        if (bringup_listeners.find(pid) == bringup_listeners.end()) {
+            RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
+            goal_handle->abort(result);
+            return;
+        }
 
         // figure out which of the subscribers we have data from and which we dont
         for(auto subscrip : bringup_listeners.at(pid)){
@@ -234,13 +293,32 @@ void LaunchManager::handle_end_accepted (const std::shared_ptr<rclcpp_action::Se
 }
 
 void LaunchManager::pub_timer_callback(){
+    auto it = bringup_listeners.begin();
+    while (it != bringup_listeners.end()) {
+        // Check for existance of process
+        int pid = it->first;
+        int err = kill(pid, 0);
+
+        if (err == -1) {
+            if (errno == EPERM) {
+                RCLCPP_ERROR(get_logger(), "Parent process has no permission to remove child process %d.", pid);
+            } else if (errno == ESRCH) {
+                RCLCPP_INFO(get_logger(), "Child process %d has died.", pid);
+                // Erase and get next element
+                it = bringup_listeners.erase(it);
+            }
+        } else {
+            ++it;
+        }
+    }
+
     // check for subscribers before doing any of this work
     // if no subscribers, dont publish
     if(bringup_status->get_subscription_count() == 0)
         return;
 
     // create the vector of pids and resize it correctly
-    std::vector<int16_t> pidList;
+    std::vector<int> pidList;
     pidList.reserve(bringup_listeners.size());
 
     // get the list of PIDs
@@ -253,26 +331,6 @@ void LaunchManager::pub_timer_callback(){
 
     // send the status
     bringup_status->publish(launchesMsg);
-}
-
-const std::string LaunchManager::get_hostname(){
-    // retrieve the system hostname in hopefully MAX_HOST_LEN characters -1 for null term
-    char hostCstr[MAX_HOST_LEN];
-    ::gethostname(hostCstr, MAX_HOST_LEN);
-    
-    std::string hostnameInternal(hostCstr);
-
-    // make sure we have a null termination
-    if(hostnameInternal.length() >= MAX_HOST_LEN){
-        hostnameInternal = "unknown_host";
-        RCLCPP_WARN_STREAM(get_logger(), "Failed to discover system hostname, falling back to default, " << hostnameInternal);
-    } else {
-        // replace the dashes with underscores, because the spec doesnt like dashes
-        std::replace(hostnameInternal.begin(), hostnameInternal.end(), '-', '_');
-    }
-
-    // kinda important.... without this strings raise a bad_alloc
-    return hostnameInternal;
 }
 
 void GenericSubCallback::callback(std::shared_ptr<rclcpp::SerializedMessage> msg){
