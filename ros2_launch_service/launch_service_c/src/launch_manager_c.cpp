@@ -1,4 +1,6 @@
 #include "launch_service_c/launch_manager_c.h"
+
+#include <ament_index_cpp/get_package_prefix.hpp>
 #include <filesystem>
 #include <sstream>
 
@@ -51,11 +53,18 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
 
         // create the launch path
         std::string packagePath;
-        if(goal_handle->get_goal()->launch_package.find('/') != std::string::npos)
-            packagePath = goal_handle->get_goal()->launch_package;
-        else
-            packagePath = ament_index_cpp::get_package_share_directory(
-                goal_handle->get_goal()->launch_package) + "/launch";
+        try {
+            if(goal_handle->get_goal()->launch_package.find('/') != std::string::npos) {
+                packagePath = goal_handle->get_goal()->launch_package;
+            } else {
+                packagePath = ament_index_cpp::get_package_share_directory(
+                    goal_handle->get_goal()->launch_package) + "/launch";
+
+            }
+        } catch (ament_index_cpp::PackageNotFoundError e) {
+            // RCLCPP_ERROR is called from the parent, so the child can just die. 
+            std::abort();
+        }
         
         std::string launchPath = packagePath + "/" + goal_handle->get_goal()->launch_file;
 
@@ -116,12 +125,27 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
             }
 
             // create the Generic subscription and its counterpart info class
-            auto genSubCb = std::make_shared<GenericSubCallback>(pid);
-            auto genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos, 
-                std::bind(&GenericSubCallback::callback, genSubCb, _1));
-
-            // add it to the subscriptions list
-            genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
+            std::shared_ptr<GenericSubCallback> genSubCb;
+            rclcpp::GenericSubscription::SharedPtr genSub;
+            try {
+                genSubCb = std::make_shared<GenericSubCallback>(pid);
+                genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos, 
+                    std::bind(&GenericSubCallback::callback, genSubCb, _1));
+                // add it to the subscriptions list
+                genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
+            } catch (ament_index_cpp::PackageNotFoundError e) {
+                RCLCPP_ERROR(get_logger(), "BringupStart message contains a topic from an unknown package: \"%s\"", e.package_name);
+                auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
+                result->pid = pid;
+                goal_handle->abort(result);
+                return;
+            } catch (std::runtime_error e) {
+                RCLCPP_ERROR(get_logger(), "Topic \"%s\" contains a non existant topic type: \"%s\"", topic.name, topic.type_name);
+                auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
+                result->pid = pid;
+                goal_handle->abort(result);
+                return;
+            }
         }
 
         // add the PID to the list of processes to track
