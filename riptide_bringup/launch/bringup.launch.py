@@ -65,5 +65,5 @@ def generate_launch_description():
     # create the launch description 
     return LaunchDescription([
         DeclareLaunchArgument('robot', default_value=default_robot_name, description='name of the robot to spawn'),
-        GroupAction(ns_descrips),
+        GroupAction(ns_descrips, scoped=True),
     ])
