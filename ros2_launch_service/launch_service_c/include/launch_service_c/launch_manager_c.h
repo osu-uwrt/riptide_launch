@@ -28,12 +28,15 @@ namespace launch_manager {
     private: 
         bool hasRecieved = false;
         int pid = 0;
+        std::string topicName;
     public:
-        GenericSubCallback(int childPid): pid(childPid) {};
+        GenericSubCallback(int childPid, const std::string& launchTopicName): pid(childPid), topicName(launchTopicName) {};
 
         void callback(std::shared_ptr<rclcpp::SerializedMessage> msg);
 
         bool hasRecievedData() {return hasRecieved;};
+
+        const std::string &getTopicName() {return topicName;};
 
     };
 

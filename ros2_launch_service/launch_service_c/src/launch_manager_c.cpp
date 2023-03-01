@@ -128,7 +128,7 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
             std::shared_ptr<GenericSubCallback> genSubCb;
             rclcpp::GenericSubscription::SharedPtr genSub;
             try {
-                genSubCb = std::make_shared<GenericSubCallback>(pid);
+                genSubCb = std::make_shared<GenericSubCallback>(pid, topic.name);
                 genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos, 
                     std::bind(&GenericSubCallback::callback, genSubCb, _1));
                 // add it to the subscriptions list
@@ -199,6 +199,7 @@ void LaunchManager::monitor_child_start(
     // begin startup monitoring here
     while(startTime + startup_timeout > get_clock()->now()){
         recievedCount = 0;
+        std::vector<std::string> completedTopics;
 
         if (bringup_listeners.find(pid) == bringup_listeners.end()) {
             RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
@@ -208,11 +209,16 @@ void LaunchManager::monitor_child_start(
 
         // figure out which of the subscribers we have data from and which we dont
         for(auto subscrip : bringup_listeners.at(pid)){
-            recievedCount += std::get<1>(subscrip)->hasRecievedData()? 1 : 0;
+            if (std::get<1>(subscrip)->hasRecievedData()) {
+                recievedCount++;
+                completedTopics.push_back(std::get<1>(subscrip)->getTopicName());
+            }
+
         }
 
         // fill out and send the feedback message with current status
         fbMsg->completed_topics = recievedCount;
+        fbMsg->completed_topic_names = completedTopics;
         goal_handle->publish_feedback(fbMsg);
 
         // check if the recieve count matches the expected count. if they do, bail the loop
