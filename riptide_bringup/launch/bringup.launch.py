@@ -9,7 +9,7 @@ from launch_ros.actions import PushRosNamespace
 from launch.substitutions import LaunchConfiguration as LC
 import os
 
-default_robot_name = "tempest"
+default_robot_name = "talos"
 
 # all of the robot namespaced launch files to start
 ns_launch_files = [
@@ -46,9 +46,6 @@ def generate_launch_description():
 
     # setup a list to collect launch descriptions
     ns_descrips = []
-
-    # setup a namespace to put everything in
-    ns_descrips.append(PushRosNamespace(robot_name))
 
     # iterate the list of launch files we were given to start
     for launch_file in ns_launch_files:
