@@ -203,7 +203,7 @@ void LaunchManager::monitor_child_start(
     // begin startup monitoring here
     while(startTime + startup_timeout > get_clock()->now()){
         recievedCount = 0;
-        std::vector<std::string> completedTopics;
+        std::vector<std::string> uncompletedTopics;
 
         if (bringup_listeners.find(pid) == bringup_listeners.end()) {
             RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
@@ -215,14 +215,15 @@ void LaunchManager::monitor_child_start(
         for(auto subscrip : bringup_listeners.at(pid)){
             if (std::get<1>(subscrip)->hasRecievedData()) {
                 recievedCount++;
-                completedTopics.push_back(std::get<1>(subscrip)->getTopicName());
+            } else {
+                uncompletedTopics.push_back(std::get<1>(subscrip)->getTopicName());
             }
 
         }
 
         // fill out and send the feedback message with current status
         fbMsg->completed_topics = recievedCount;
-        fbMsg->completed_topic_names = completedTopics;
+        fbMsg->uncompleted_topic_names = uncompletedTopics;
         goal_handle->publish_feedback(fbMsg);
 
         // check if the recieve count matches the expected count. if they do, bail the loop
