@@ -36,10 +36,14 @@ LaunchManager::LaunchManager(const std::string &hostname) : Node(hostname + "_la
 }
 
 rclcpp_action::GoalResponse LaunchManager::handle_bringup_goal (const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const launch_msgs::action::BringupStart::Goal> goal){
+    (void) uuid;
+    (void) goal;
+
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
 rclcpp_action::CancelResponse LaunchManager::handle_bringup_cancel (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle) {
+    (void) goal_handle;
     return rclcpp_action::CancelResponse::ACCEPT;
 }
 
@@ -61,7 +65,7 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
                     goal_handle->get_goal()->launch_package) + "/launch";
 
             }
-        } catch (ament_index_cpp::PackageNotFoundError e) {
+        } catch (ament_index_cpp::PackageNotFoundError& e) {
             // RCLCPP_ERROR is called from the parent, so the child can just die. 
             std::abort();
         }
@@ -128,18 +132,18 @@ void LaunchManager::handle_bringup_accepted (const std::shared_ptr<rclcpp_action
             std::shared_ptr<GenericSubCallback> genSubCb;
             rclcpp::GenericSubscription::SharedPtr genSub;
             try {
-                genSubCb = std::make_shared<GenericSubCallback>(pid);
+                genSubCb = std::make_shared<GenericSubCallback>(pid, topic.name);
                 genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos, 
                     std::bind(&GenericSubCallback::callback, genSubCb, _1));
                 // add it to the subscriptions list
                 genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
-            } catch (ament_index_cpp::PackageNotFoundError e) {
+            } catch (ament_index_cpp::PackageNotFoundError& e) {
                 RCLCPP_ERROR(get_logger(), "BringupStart message contains a topic from an unknown package: \"%s\"", e.package_name.c_str());
                 auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
                 result->pid = pid;
                 goal_handle->abort(result);
                 return;
-            } catch (std::runtime_error e) {
+            } catch (std::runtime_error& e) {
                 RCLCPP_ERROR(get_logger(), "Topic \"%s\" contains a non existant topic type: \"%s\"", topic.name.c_str(), topic.type_name.c_str());
                 auto result = std::make_shared<launch_msgs::action::BringupStart::Result>();
                 result->pid = pid;
@@ -199,6 +203,7 @@ void LaunchManager::monitor_child_start(
     // begin startup monitoring here
     while(startTime + startup_timeout > get_clock()->now()){
         recievedCount = 0;
+        std::vector<std::string> uncompletedTopics;
 
         if (bringup_listeners.find(pid) == bringup_listeners.end()) {
             RCLCPP_ERROR(get_logger(), "Launch process died during startup...");
@@ -208,11 +213,17 @@ void LaunchManager::monitor_child_start(
 
         // figure out which of the subscribers we have data from and which we dont
         for(auto subscrip : bringup_listeners.at(pid)){
-            recievedCount += std::get<1>(subscrip)->hasRecievedData()? 1 : 0;
+            if (std::get<1>(subscrip)->hasRecievedData()) {
+                recievedCount++;
+            } else {
+                uncompletedTopics.push_back(std::get<1>(subscrip)->getTopicName());
+            }
+
         }
 
         // fill out and send the feedback message with current status
         fbMsg->completed_topics = recievedCount;
+        fbMsg->uncompleted_topic_names = uncompletedTopics;
         goal_handle->publish_feedback(fbMsg);
 
         // check if the recieve count matches the expected count. if they do, bail the loop
@@ -255,6 +266,7 @@ void LaunchManager::monitor_child_start(
 }
 
 rclcpp_action::GoalResponse LaunchManager::handle_end_goal (const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const launch_msgs::action::BringupEnd::Goal> goal) {
+    (void) uuid;
     // Ensure PID is within the bringup_listeners before accepting
     if (bringup_listeners.find(goal->pid) != bringup_listeners.end()) {
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -265,6 +277,8 @@ rclcpp_action::GoalResponse LaunchManager::handle_end_goal (const rclcpp_action:
 }
 
 rclcpp_action::CancelResponse LaunchManager::handle_end_cancel (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupEnd>> goal_handle) {
+    (void) goal_handle;
+
     // The processes are already finishing. No time to change your mind now.
     RCLCPP_WARN(get_logger(), "Rejecting cancellation of bringup_end goal for process with PID %d.", goal_handle->get_goal()->pid);
     return rclcpp_action::CancelResponse::REJECT;
@@ -334,6 +348,8 @@ void LaunchManager::pub_timer_callback(){
 }
 
 void GenericSubCallback::callback(std::shared_ptr<rclcpp::SerializedMessage> msg){
+    (void) msg;
+
     hasRecieved = true;
     // std::cout << "got data in pid " << getpid() << std::endl;
 }

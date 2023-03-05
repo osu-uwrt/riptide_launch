@@ -13,3 +13,4 @@ int32 pid
 # Feedback
 int32 completed_topics
 int32 expected_topics
+string[] uncompleted_topic_names
