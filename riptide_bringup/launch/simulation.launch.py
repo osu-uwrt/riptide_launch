@@ -44,7 +44,7 @@ ns_launch_files = [
     ),
 ]
 
-simulinkControl.launchSimulink()
+simulinkControl.launchSimulink(True)
 gazeboControl.launchGazebo()
 
 def generate_launch_description():
