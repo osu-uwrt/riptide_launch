@@ -47,9 +47,6 @@ def generate_launch_description():
     # setup a list to collect launch descriptions
     ns_descrips = []
 
-    # setup a namespace to put everything in
-    ns_descrips.append(PushRosNamespace(robot_name))
-
     # iterate the list of launch files we were given to start
     for launch_file in ns_launch_files:
         ns_descrips.append(
@@ -65,5 +62,5 @@ def generate_launch_description():
     # create the launch description 
     return LaunchDescription([
         DeclareLaunchArgument('robot', default_value=default_robot_name, description='name of the robot to spawn'),
-        GroupAction(ns_descrips, scoped=True),
+        GroupAction(ns_descrips),
     ])
