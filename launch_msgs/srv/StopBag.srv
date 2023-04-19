@@ -1,0 +1,8 @@
+
+int32 bid
+
+---
+
+bool err
+string err_msg
+uint8 err_code
