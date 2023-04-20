@@ -1,13 +1,17 @@
 string file_name
-TopicData topics[]
+TopicData[] topics
 
 ---
+# bag node pid
+int32 pid
 
+# the error status  
 bool err
 uint8 err_code
 string err_msg
 
 uint8 ERR_NONE = 0
-uint8 ERR_ACCESS = 1
-uint8 ERR_BAD_FILE_NAME = 2
-uint8 ERR_FILE_EXISTS = 3
+uint8 ERR_MISSING_ARGS = 1
+uint8 ERR_MISSING_TOPICS = 2
+uint8 ERR_OPENING_BAG = 3
+uint8 ERR_UNKNOWN = 4

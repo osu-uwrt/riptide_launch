@@ -12,7 +12,7 @@
 
 // Message headers
 #include <launch_msgs/action/bringup_end.hpp>
-#include <launch_msgs/msg/list_launch.hpp>
+#include <launch_msgs/msg/list_pids.hpp>
 #include <launch_msgs/action/bringup_start.hpp>
 
 using namespace std::chrono_literals;
@@ -49,7 +49,7 @@ namespace launch_manager {
         std::chrono::seconds startup_timeout = 30s;
         
         // Action servers and services and topics
-        rclcpp::Publisher<launch_msgs::msg::ListLaunch>::SharedPtr bringup_status;
+        rclcpp::Publisher<launch_msgs::msg::ListPids>::SharedPtr bringup_status;
         rclcpp_action::Server<launch_msgs::action::BringupEnd>::SharedPtr bringup_end;
         rclcpp_action::Server<launch_msgs::action::BringupStart>::SharedPtr bringup_start;
         rclcpp::TimerBase::SharedPtr publish_timer;

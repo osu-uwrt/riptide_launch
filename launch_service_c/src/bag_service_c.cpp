@@ -1,4 +1,5 @@
 #include "launch_service_c/bag_manager_c.h"
+#include "launch_service_c/bag_node_c.h"
 
 #include <fstream>
 
@@ -48,32 +49,24 @@ int main(int argc, char **argv)
         std::cout << "Starting child. . .\n";
 
         // Check if there are enough arguments passed through for there to be a launch argument
-        if (argc < child_flag_index + 2)
+        if ((argc - child_flag_index - 1) % 3 == 0)
         {
-            std::cerr << "Not enough arguments supplied for there to exist a launch path. . .\n";
+            std::cerr << "Not enough arguments supplied for there to exist a valid bag config. . .\n";
             exit(EXIT_FAILURE);
         }
-        // Verify file exists
-        std::ifstream f(argv[child_flag_index + 1]);
 
-        if (!f.good())
-        {
-            std::cerr << "File \"" << argv[child_flag_index + 1] << "\" does not exist.\n";
-            exit(EXIT_FAILURE);
-        }
         // Create extra launch arguments
         std::vector<std::string> launch_args;
-        for (size_t i = child_flag_index + 2; i < argc; ++i)
+        for (size_t i = child_flag_index + 1; i < argc; ++i)
         {
             launch_args.push_back(argv[i]);
         }
 
-        // Execute Python.
-        // exec_python(argv[child_flag_index + 1], launch_args);
+        // start the child!
+        return launch_manager::BagNode::main(launch_args);
     }
     else
     {
-
         // Ignore SIGCHLD signals, so the child completely dies without much of a fuss.
         struct sigaction sigchld_ignore;
         sigchld_ignore.sa_handler = SIG_IGN;

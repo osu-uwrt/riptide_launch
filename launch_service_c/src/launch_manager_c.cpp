@@ -29,7 +29,7 @@ LaunchManager::LaunchManager(const std::string &hostname) : Node(hostname + "_la
         std::bind(&LaunchManager::handle_end_accepted, this, _1));
 
     // create the alive topic
-    bringup_status = create_publisher<launch_msgs::msg::ListLaunch>(hostname + "/launch_status", rclcpp::SystemDefaultsQoS());
+    bringup_status = create_publisher<launch_msgs::msg::ListPids>(hostname + "/launch_status", rclcpp::SystemDefaultsQoS());
 
     // create the status publish timer
     publish_timer = create_wall_timer(2s, std::bind(&LaunchManager::pub_timer_callback, this));
@@ -340,7 +340,7 @@ void LaunchManager::pub_timer_callback(){
         pidList.push_back(imap.first);
 
     // create the message
-    launch_msgs::msg::ListLaunch launchesMsg;
+    launch_msgs::msg::ListPids launchesMsg;
     launchesMsg.pids = pidList;
 
     // send the status

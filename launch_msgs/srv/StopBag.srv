@@ -1,8 +1,12 @@
 
-int32 bid
+int32 pid
 
 ---
 
-bool err
 string err_msg
 uint8 err_code
+
+
+uint8 ERR_NONE = 0
+uint8 BAD_PERM = 1
+uint8 ALR_DEAD = 2
