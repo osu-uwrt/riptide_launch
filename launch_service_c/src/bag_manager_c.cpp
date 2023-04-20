@@ -88,6 +88,8 @@ namespace launch_manager {
 
                     // can read status codes now :)
                     RCLCPP_ERROR(get_logger(), "Process with PID %d died on startup with code %d.", pid, es);
+                    response->err = es;
+                    response->err_msg = "Bag died on startup";
                 }
             }
         }
@@ -104,12 +106,12 @@ namespace launch_manager {
                 RCLCPP_ERROR(get_logger(), "Process with PID %d does not exist or is already terminating.", request->pid);
 
                 response->err_code = launch_msgs::srv::StopBag::Response::ALR_DEAD;
-                response->err_msg = "BID was already dead";
+                response->err_msg = "PID was already dead";
             } else if (errno == EPERM) {
                 RCLCPP_ERROR(get_logger(), "The monitor has no permission to kill process with PID %d.", request->pid);
 
                 response->err_code = launch_msgs::srv::StopBag::Response::BAD_PERM;
-                response->err_msg = "Insufficent permissions to kill BID";
+                response->err_msg = "Insufficent permissions to kill PID";
             }
         } else {
             const auto it = pidsMap.find(request->pid);

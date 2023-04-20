@@ -69,8 +69,6 @@ namespace launch_manager
         return launch_msgs::srv::StartBag::Response::ERR_NONE;
     }
 
-
-
     BagNode::~BagNode(){
         writer->~Writer();
     }
