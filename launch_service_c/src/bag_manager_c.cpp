@@ -7,7 +7,7 @@ using namespace std::placeholders;
 using namespace std::chrono_literals;
 
 namespace launch_manager {
-    BagManager::BagManager(const std::string & hostname) : Node(hostname + "_launch_manager"){
+    BagManager::BagManager(const std::string & hostname) : Node(hostname + "_bag_manager"){
         // create the start server
         startService = create_service<launch_msgs::srv::StartBag>(hostname + "/bag_start", std::bind(&BagManager::startServ, this, _1, _2));
 
