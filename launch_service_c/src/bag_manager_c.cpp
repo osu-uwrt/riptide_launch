@@ -2,6 +2,7 @@
 #include <chrono>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 using namespace std::placeholders;
 using namespace std::chrono_literals;
@@ -52,46 +53,58 @@ namespace launch_manager {
         // terminate with a nullptr
         cstrings.push_back(nullptr);
 
+        RCLCPP_DEBUG(get_logger(), "Parent ready for fork");
+
         // we start the fork
         pid_t pid = fork();
         
         // two processes at this point
         if(pid == 0){
-            // child
-
-            // If this call succeeds, it should never return.
+            // If this call succeeds, it should never return. only child now
             execv("/proc/self/exe", const_cast<char *const*>(cstrings.data()));
 
             // execl failed. Print fatal error, abort the child
             RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));    
             std::abort();
         } else {
-            // parent
-            RCLCPP_INFO_STREAM(get_logger(), "Parent thread begin monitoring on PID " << pid);
+            RCLCPP_INFO(get_logger(), "Parent thread begin monitoring on PID %d", pid);
 
-            // wait a 5 ms for the exec to fire
-            usleep(5000);
+            // wait about 1s for the exec to actually fire
+            usleep(1000000);
 
             int status;
-            pid_t result = waitpid(pid, &status, WNOHANG);
-            if (result == 0) {
-                // add the pid to the pid list that we are keeping track of
-                pidsMap[pid] = request->file_name;
-
-                response->pid = pid;
-                response->err = launch_msgs::srv::StartBag::Response::ERR_NONE;
-            } else if (result == -1) {
-                RCLCPP_FATAL(get_logger(), "Process with PID %d failed to get status", pid);
-            } else {
-                if (WIFEXITED(status)) {
-                    int es = WEXITSTATUS(status);
-
-                    // can read status codes now :)
-                    RCLCPP_ERROR(get_logger(), "Process with PID %d died on startup with code %d.", pid, es);
-                    response->err = es;
-                    response->err_msg = "Bag died on startup";
-                }
+            if ( waitpid(pid, &status, WNOHANG) == -1 ) {
+                RCLCPP_FATAL(get_logger(), "Parent process could not contact child %d, err: %s", pid, strerror(errno));
             }
+
+            bool pidAlive = true;
+
+            if ( WIFEXITED(status) ) {
+                int exit_code = WEXITSTATUS(status);
+                RCLCPP_FATAL(get_logger(), "Child %d exited with code %d", pid, exit_code);
+
+                pidAlive = false;
+                response->err_code = exit_code;
+                response->err_msg = "Bag died on startup with exit code " + std::to_string(exit_code);
+            }
+
+            if( WIFSTOPPED(status) ){
+                int stop_sig = WSTOPSIG(status);
+                RCLCPP_FATAL(get_logger(), "Child %d stopped with stop signal %d", pid, stop_sig);
+
+                pidAlive = false;
+                response->err_code = launch_msgs::srv::StartBag::Response::ERR_UNKNOWN;
+                response->err_msg = "Bag died on startup with signal " + std::to_string(stop_sig);
+            }
+
+            if(pidAlive){
+                RCLCPP_INFO(get_logger(), "Child startup OK");
+
+                pidsMap[pid] = request->file_name;
+                response->pid = pid;
+            }
+
+            RCLCPP_DEBUG(get_logger(), "Parent service call complete");
         }
     }
 
@@ -99,26 +112,36 @@ namespace launch_manager {
                         std::shared_ptr<launch_msgs::srv::StopBag::Response> response){
         // send a sigint to the bag
         RCLCPP_DEBUG(get_logger(), "Killing process with PID %d. . .", request->pid);
-        int err = kill(request->pid, SIGINT);
+
+        // check that the PIDS are in the map.
+        if(pidsMap.find(request->pid) != pidsMap.end()){
+            // if we have it, shut it down
+            int err = kill(request->pid, SIGINT);
         
-        if (err == -1) {
-            if (errno == ESRCH) {
-                RCLCPP_ERROR(get_logger(), "Process with PID %d does not exist or is already terminating.", request->pid);
+            if (err == -1) {
+                if (errno == ESRCH) {
+                    RCLCPP_ERROR(get_logger(), "Process with PID %d does not exist or is already terminating.", request->pid);
 
-                response->err_code = launch_msgs::srv::StopBag::Response::ALR_DEAD;
-                response->err_msg = "PID was already dead";
-            } else if (errno == EPERM) {
-                RCLCPP_ERROR(get_logger(), "The monitor has no permission to kill process with PID %d.", request->pid);
+                    response->err_code = launch_msgs::srv::StopBag::Response::ALR_DEAD;
+                    response->err_msg = "PID was already dead";
+                } else if (errno == EPERM) {
+                    RCLCPP_ERROR(get_logger(), "The monitor has no permission to kill process with PID %d.", request->pid);
 
-                response->err_code = launch_msgs::srv::StopBag::Response::BAD_PERM;
-                response->err_msg = "Insufficent permissions to kill PID";
+                    response->err_code = launch_msgs::srv::StopBag::Response::BAD_PERM;
+                    response->err_msg = "Insufficent permissions to kill PID";
+                }
+            } else {
+                const auto it = pidsMap.find(request->pid);
+                if (it != pidsMap.end())
+                    pidsMap.erase(it);
+
+                response->err_code = launch_msgs::srv::StopBag::Response::ERR_NONE;
             }
         } else {
-            const auto it = pidsMap.find(request->pid);
-            if (it != pidsMap.end())
-                pidsMap.erase(it);
+            RCLCPP_ERROR(get_logger(), "Process with PID %d does not exist or is already terminating.", request->pid);
 
-            response->err_code = launch_msgs::srv::StopBag::Response::ERR_NONE;
+            response->err_code = launch_msgs::srv::StopBag::Response::ALR_DEAD;
+            response->err_msg = "PID was already dead";
         }
     }
 
@@ -146,22 +169,33 @@ namespace launch_manager {
         while (it != pidsMap.end()) {
             // make sure our process hasnt died
             pid_t pid = it->first;
-            int err = kill(pid, 0);
 
-            if (err == -1) {
-                if (errno == EPERM) {
-                    RCLCPP_ERROR(get_logger(), "Parent process has no permission to contact child process %d.", pid);
-                } else if (errno == ESRCH) {
-                    RCLCPP_INFO(get_logger(), "Child process %d has died.", pid);
+            bool pidAlive = true;
+            int status;
+            if ( waitpid(pid, &status, WNOHANG) == -1 ) {
+                RCLCPP_FATAL(get_logger(), "Parent process could not contact child %d, err: %s", pid, strerror(errno));
+            }
 
-                    // Erase and get next element
-                    pidsMap.erase(it);
-                    
-                    // back up the iterator so that the increment puts it back
-                    it--;
-                }
-            } else {
+            if ( WIFEXITED(status) ) {
+                int exit_code = WEXITSTATUS(status);
+                RCLCPP_ERROR(get_logger(), "Child %d exited with code %d", pid, exit_code);
+
+                pidAlive = false;
+            }
+
+            if( WIFSTOPPED(status) ){
+                int stop_sig = WSTOPSIG(status);
+                RCLCPP_ERROR(get_logger(), "Child %d stopped with stop signal %d", pid, stop_sig);
+
+                pidAlive = false;
+            }
+
+            if(pidAlive){
+                // if he still alive, keep em
                 data.pids.push_back(pid);
+            } else {
+                // if he dead, bonk em
+                pidsMap.erase(it);
             }
 
             it++;

@@ -63,16 +63,15 @@ int main(int argc, char **argv)
         }
 
         // start the child!
-        return launch_manager::BagNode::main(launch_args);
+        int child = launch_manager::BagNode::main(launch_args);
+
+        std::cout << "Child exiting with code " << child << std::endl;
+
+        return child;
     }
     else
     {
-        // Ignore SIGCHLD signals, so the child completely dies without much of a fuss.
-        struct sigaction sigchld_ignore;
-        sigchld_ignore.sa_handler = SIG_IGN;
-        sigchld_ignore.sa_flags = 0; // or SA_RESTART
-        sigemptyset(&sigchld_ignore.sa_mask);
-        sigaction(SIGCHLD, &sigchld_ignore, NULL);
+        // dont supress sigchld :)
 
         // PARENT PROCESS
         // init ros node

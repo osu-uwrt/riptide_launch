@@ -57,11 +57,11 @@ namespace launch_manager
                 callbacks.push_back(genSubCb);
             }
         } catch (const std::runtime_error & e ){
-            RCLCPP_FATAL(get_logger(), "Failed to open child bag %s\n%s", bag_name, e.what());
+            RCLCPP_FATAL(get_logger(), "Failed to open child bag %s\n%s", bag_name.c_str(), e.what());
 
             return launch_msgs::srv::StartBag::Response::ERR_OPENING_BAG;
         } catch (...) {
-            RCLCPP_FATAL(get_logger(), "Failed to open child bag %s with unknown exception", bag_name);
+            RCLCPP_FATAL(get_logger(), "Failed to open child bag %s with unknown exception", bag_name.c_str());
 
             return launch_msgs::srv::StartBag::Response::ERR_UNKNOWN;
         }
@@ -74,11 +74,10 @@ namespace launch_manager
     }
 
     int BagNode::main(const std::vector<std::string> & args){
+        int exit_code = launch_msgs::srv::StartBag::Response::ERR_NONE;
+
         // create a node and run it
-        std::cout << "Starting child bag" << std::endl;
-
         rclcpp::init(0, nullptr);
-
         auto start_sec = std::to_string(int(rclcpp::Clock().now().seconds()));
 
         // first arg is the bag name
@@ -107,20 +106,26 @@ namespace launch_manager
 
         if(topics.size() < 1){
             RCLCPP_FATAL(bag->get_logger(), "No topics to bag given to child, process will terminate");
-            return launch_msgs::srv::StartBag::Response::ERR_MISSING_TOPICS;
+
+            exit_code = launch_msgs::srv::StartBag::Response::ERR_MISSING_TOPICS;
+        } else {
+            // setup the bag stuff
+            exit_code = bag->subscribeTopics(topics, bag_name + "_" + start_sec);
+
+            // make sure we init bag okay
+            if(exit_code == launch_msgs::srv::StartBag::Response::ERR_NONE){
+                // now spin the node until shutdown
+                rclcpp::spin(bag);
+            }
         }
 
-        // setup the bag stuff
-        int ret_code = bag->subscribeTopics(topics, bag_name + "_" + start_sec);
-        if(ret_code != 0)
-            return ret_code;
-
-        // now spin the node until shutdown
-        rclcpp::spin(bag);
-
-        // the node has ben called to shutdown, so rclcpp needs to be shut down as well
+        // shut down our rclcpp context cleanly
         rclcpp::shutdown();
 
-        return launch_msgs::srv::StartBag::Response::ERR_NONE;
+        std::cout << "Bag shutdown complete" << std::endl;
+
+        exit(exit_code);
+
+        // cannot return from here otherwise i cant get process status for some reason ???
     }
 } // namespace launch_manager

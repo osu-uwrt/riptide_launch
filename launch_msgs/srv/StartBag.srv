@@ -6,7 +6,6 @@ TopicData[] topics
 int32 pid
 
 # the error status  
-bool err
 uint8 err_code
 string err_msg
 
