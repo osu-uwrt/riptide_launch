@@ -3,7 +3,6 @@
 
 #include <fstream>
 
-
 #define MAX_HOST_LEN 300
 
 const std::string get_hostname()
