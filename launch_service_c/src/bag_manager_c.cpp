@@ -73,28 +73,29 @@ namespace launch_manager {
             usleep(1000000);
 
             int status;
-            if ( waitpid(pid, &status, WNOHANG) == -1 ) {
-                RCLCPP_FATAL(get_logger(), "Parent process could not contact child %d, err: %s", pid, strerror(errno));
-            }
-
             bool pidAlive = true;
+            pid_t waitStatus = waitpid(pid, &status, WNOHANG);
 
-            if ( WIFEXITED(status) ) {
-                int exit_code = WEXITSTATUS(status);
-                RCLCPP_FATAL(get_logger(), "Child %d exited with code %d", pid, exit_code);
+            if (waitStatus == -1 ) {
+                RCLCPP_FATAL(get_logger(), "Parent process could not contact child %d, err: %s", pid, strerror(errno));
+            } else if (waitStatus > 0){
+                if ( WIFEXITED(status) ) {
+                    int exit_code = WEXITSTATUS(status);
+                    RCLCPP_FATAL(get_logger(), "Child %d exited on start with code %d", pid, exit_code);
 
-                pidAlive = false;
-                response->err_code = exit_code;
-                response->err_msg = "Bag died on startup with exit code " + std::to_string(exit_code);
-            }
+                    pidAlive = false;
+                    response->err_code = exit_code;
+                    response->err_msg = "Bag died on startup with exit code " + std::to_string(exit_code);
+                }
 
-            if( WIFSTOPPED(status) ){
-                int stop_sig = WSTOPSIG(status);
-                RCLCPP_FATAL(get_logger(), "Child %d stopped with stop signal %d", pid, stop_sig);
+                if( WIFSTOPPED(status) ){
+                    int stop_sig = WSTOPSIG(status);
+                    RCLCPP_FATAL(get_logger(), "Child %d stopped with stop signal %d", pid, stop_sig);
 
-                pidAlive = false;
-                response->err_code = launch_msgs::srv::StartBag::Response::ERR_UNKNOWN;
-                response->err_msg = "Bag died on startup with signal " + std::to_string(stop_sig);
+                    pidAlive = false;
+                    response->err_code = launch_msgs::srv::StartBag::Response::ERR_UNKNOWN;
+                    response->err_msg = "Bag died on startup with signal " + std::to_string(stop_sig);
+                }   
             }
 
             if(pidAlive){
@@ -165,40 +166,41 @@ namespace launch_manager {
 
         launch_msgs::msg::ListPids data;
 
-        auto it = pidsMap.begin();
-        while (it != pidsMap.end()) {
+        
+        for (auto it = pidsMap.begin(); it != pidsMap.end(); ) {
             // make sure our process hasnt died
             pid_t pid = it->first;
 
             bool pidAlive = true;
             int status;
-            if ( waitpid(pid, &status, WNOHANG) == -1 ) {
+            pid_t pidStatus = waitpid(pid, &status, WNOHANG);
+            if ( pidStatus  == -1 ) {
                 RCLCPP_FATAL(get_logger(), "Parent process could not contact child %d, err: %s", pid, strerror(errno));
-            }
+            } else if( pidStatus > 0 ){
+                if ( WIFEXITED(status) ) {
+                    int exit_code = WEXITSTATUS(status);
+                    RCLCPP_ERROR(get_logger(), "Child %d exited with code %d while running", pid, exit_code);
 
-            if ( WIFEXITED(status) ) {
-                int exit_code = WEXITSTATUS(status);
-                RCLCPP_ERROR(get_logger(), "Child %d exited with code %d", pid, exit_code);
+                    pidAlive = false;
+                }
 
-                pidAlive = false;
-            }
+                if( WIFSTOPPED(status) ){
+                    int stop_sig = WSTOPSIG(status);
+                    RCLCPP_ERROR(get_logger(), "Child %d stopped with stop signal %d while running", pid, stop_sig);
 
-            if( WIFSTOPPED(status) ){
-                int stop_sig = WSTOPSIG(status);
-                RCLCPP_ERROR(get_logger(), "Child %d stopped with stop signal %d", pid, stop_sig);
-
-                pidAlive = false;
+                    pidAlive = false;
+                }
             }
 
             if(pidAlive){
                 // if he still alive, keep em
                 data.pids.push_back(pid);
+
+                it++;
             } else {
                 // if he dead, bonk em
-                pidsMap.erase(it);
+                pidsMap.erase(it++);
             }
-
-            it++;
         }
 
         monitorTopic->publish(data);
