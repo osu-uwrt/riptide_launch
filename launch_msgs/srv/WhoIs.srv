@@ -1,0 +1,7 @@
+# the PID of the queried processes
+int32[] pids
+
+---
+
+# the resolved names of the processes
+string[] names
