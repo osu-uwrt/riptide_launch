@@ -1,5 +1,6 @@
 #include <fstream>
 #include <csignal>
+#include <unistd.h>
 
 #include "launch_service_c/launch_manager_c.h"
 

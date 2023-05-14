@@ -2,6 +2,7 @@
 #include "launch_service_c/bag_node_c.h"
 
 #include <fstream>
+#include <unistd.h>
 
 #define MAX_HOST_LEN 300
 
