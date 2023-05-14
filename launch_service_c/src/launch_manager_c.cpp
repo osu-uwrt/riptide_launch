@@ -32,6 +32,10 @@ LaunchManager::LaunchManager(const std::string &hostname) : Node(hostname + "_la
     // create the alive topic
     bringup_status = create_publisher<launch_msgs::msg::ListPids>(hostname + "/launch_status", rclcpp::SystemDefaultsQoS());
 
+    // create the whois request server
+    bringup_whois = create_service<launch_msgs::srv::WhoIs>(hostname + "/launch_whois", 
+        std::bind(&LaunchManager::whois_request, this, _1, _2));
+
     // create the status publish timer
     publish_timer = create_wall_timer(2s, std::bind(&LaunchManager::pub_timer_callback, this));
 }
@@ -349,6 +353,10 @@ void LaunchManager::handle_end_accepted(const std::shared_ptr<rclcpp_action::Ser
         bringup_listeners.erase(pid);
         goal_handle->succeed(result);
     }
+}
+
+void LaunchManager::whois_request(const std::shared_ptr<launch_msgs::srv::WhoIs::Request> request, std::shared_ptr<launch_msgs::srv::WhoIs::Response> response){
+    
 }
 
 void LaunchManager::pub_timer_callback()

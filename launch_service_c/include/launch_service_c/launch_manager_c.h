@@ -14,12 +14,14 @@
 #include <launch_msgs/action/bringup_end.hpp>
 #include <launch_msgs/msg/list_pids.hpp>
 #include <launch_msgs/action/bringup_start.hpp>
+#include <launch_msgs/srv/who_is.hpp>
 
 using namespace std::chrono_literals;
 
 
 // Flag passed to process to tell it that it's a child process and should execute a python shell
 const std::string SUPER_SECRET_FLAG = "--exec-python-from-child-super-secret-no-backsies";
+
 // Execute python. Must be called ONLY in the child process
 void exec_python(const char * const launch_path, const std::vector<std::string> launch_args);
 
@@ -52,6 +54,7 @@ namespace launch_manager {
         rclcpp::Publisher<launch_msgs::msg::ListPids>::SharedPtr bringup_status;
         rclcpp_action::Server<launch_msgs::action::BringupEnd>::SharedPtr bringup_end;
         rclcpp_action::Server<launch_msgs::action::BringupStart>::SharedPtr bringup_start;
+        rclcpp::Service<launch_msgs::srv::WhoIs>::SharedPtr bringup_whois;
         rclcpp::TimerBase::SharedPtr publish_timer;
 
         // Binding methods for bringup_start server
@@ -64,6 +67,9 @@ namespace launch_manager {
         rclcpp_action::CancelResponse handle_end_cancel (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupEnd>> goal_handle);
         void handle_end_accepted (const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupEnd>> goal_handle);
         
+        // binding method for the whois service
+        void whois_request(const std::shared_ptr<launch_msgs::srv::WhoIs::Request> request, std::shared_ptr<launch_msgs::srv::WhoIs::Response> response);
+
         void pub_timer_callback();
 
         // helper functions
