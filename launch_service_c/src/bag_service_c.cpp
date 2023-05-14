@@ -9,7 +9,7 @@ const std::string get_hostname()
 {
     // retrieve the system hostname in hopefully MAX_HOST_LEN characters -1 for null term
     char hostCstr[MAX_HOST_LEN];
-    gethostname(hostCstr, MAX_HOST_LEN);
+    get_hostname(hostCstr, MAX_HOST_LEN);
 
     std::string hostnameInternal(hostCstr);
 
