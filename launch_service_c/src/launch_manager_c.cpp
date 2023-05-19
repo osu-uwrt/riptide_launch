@@ -127,7 +127,7 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
 
         // make the callback group to yeet later :)
         // this is to fix a subscription bug where successive starts fail to bind properly to their subscriptions
-        rclcpp::CallbackGroup::SharedPtr cbg = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        rclcpp::CallbackGroup::SharedPtr cbg = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
         // work through each topic to make the list of topics to monitor
         std::vector<std::tuple<
