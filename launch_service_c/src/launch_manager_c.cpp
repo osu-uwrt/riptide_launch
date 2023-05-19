@@ -118,15 +118,22 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
         execv("/proc/self/exe", const_cast<char *const *>(cstrings.data()));
 
         // execl failed. Print fatal error, abort the child
-        RCLCPP_FATAL(get_logger(), "execl failed: %s", strerror(errno));
+        RCLCPP_FATAL(get_logger(), "execv failed: %s", strerror(errno));
         std::abort();
     }
     else
     {
         RCLCPP_INFO_STREAM(get_logger(), "Parent thread begin monitoring on PID " << pid);
 
+        // make the callback group to yeet later :)
+        // this is to fix a subscription bug where successive starts fail to bind properly to their subscriptions
+        rclcpp::CallbackGroup::SharedPtr cbg = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
         // work through each topic to make the list of topics to monitor
-        std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, std::shared_ptr<GenericSubCallback>>> genSubscrip;
+        std::vector<std::tuple<
+            rclcpp::GenericSubscription::SharedPtr,
+            std::shared_ptr<GenericSubCallback>>> genSubscrip;
+
         for (auto topic : goal_handle->get_goal()->topics)
         {
 
@@ -151,11 +158,14 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
             // create the Generic subscription and its counterpart info class
             std::shared_ptr<GenericSubCallback> genSubCb;
             rclcpp::GenericSubscription::SharedPtr genSub;
+            rclcpp::SubscriptionOptions subOpt; 
             try
             {
                 genSubCb = std::make_shared<GenericSubCallback>(pid, topic.name);
+                subOpt.callback_group = cbg;
                 genSub = create_generic_subscription(topic.name, topic.type_name, genSubQos,
-                                                     std::bind(&GenericSubCallback::callback, genSubCb, _1));
+                                                     std::bind(&GenericSubCallback::callback, genSubCb, _1),
+                                                     subOpt);
                 // add it to the subscriptions list
                 genSubscrip.push_back(std::make_tuple(genSub, genSubCb));
             }
@@ -176,9 +186,15 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
                 return;
             }
         }
+        // create the full struct
+        LaunchData launch = {
+            genSubscrip,
+            false,
+            cbg
+        };
 
         // add the PID to the list of processes to track
-        bringup_listeners.emplace(pid, genSubscrip);
+        bringup_listeners.emplace(pid, launch);
 
         // now we can thread out to monitor the startup
         auto action_thread_ = std::thread{std::bind(&LaunchManager::monitor_child_start, this, _1, _2), pid, goal_handle};
@@ -243,7 +259,7 @@ void LaunchManager::monitor_child_start(
         }
 
         // figure out which of the subscribers we have data from and which we dont
-        for (auto subscrip : bringup_listeners.at(pid))
+        for (auto subscrip : bringup_listeners.at(pid).subsData)
         {
             if (std::get<1>(subscrip)->hasRecievedData())
             {
@@ -268,16 +284,11 @@ void LaunchManager::monitor_child_start(
         checkRate.sleep();
     }
 
-    // close out the subscribers and destroy them
-    for (auto subscrip : bringup_listeners.at(pid))
-    {
-        // std::cout << std::get<0>(subscrip).use_count() << " " << std::get<1>(subscrip).use_count() << std::endl;
+    // CANNOT CLOSE OUT SUBSCRIBERS AND ROS CONTEXT FROM ANOTHER THREAD
+    // IT GETS REALLY CRANKY WHEN IT WORKS PROPERLY
+    // instead we mark for deletion and do the delete on the main thread
+    bringup_listeners.at(pid).readyDelete = true;
 
-        std::get<0>(subscrip).reset();
-        std::get<1>(subscrip).reset();
-
-        // std::cout << std::get<0>(subscrip).use_count() << " " << std::get<1>(subscrip).use_count() << std::endl;
-    }
 
     // check for a timeout vs a success
     if (recievedCount != topicCount)
@@ -368,6 +379,25 @@ void LaunchManager::pub_timer_callback()
         int pid = it->first;
         int err = kill(pid, 0);
 
+        // test for deletion marker on subscriptions
+        auto launchData = it->second;
+        if(launchData.readyDelete){
+            for(auto tuple : launchData.subsData){
+                // remove the subscription, then the callback 
+                std::get<0>(tuple).reset();
+                std::get<1>(tuple).reset();
+            }
+
+            // now clear the vector
+            launchData.subsData.clear();
+
+            // anihilate the callback group
+            launchData.cbg.reset();
+
+            // unmark for delete
+            launchData.readyDelete = false;
+        }
+
         if (err == -1)
         {
             if (errno == EPERM)
@@ -386,6 +416,8 @@ void LaunchManager::pub_timer_callback()
             ++it;
         }
     }
+
+    // RCLCPP_INFO(get_logger(), "Checked for news");
 
     // check for subscribers before doing any of this work
     // if no subscribers, dont publish

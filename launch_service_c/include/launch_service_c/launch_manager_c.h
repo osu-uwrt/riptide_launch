@@ -42,10 +42,17 @@ namespace launch_manager {
 
     };
 
+    struct LaunchData {
+        std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, 
+            std::shared_ptr<GenericSubCallback>>> subsData;
+        bool readyDelete;
+        rclcpp::CallbackGroup::SharedPtr cbg;
+    };
+
     class LaunchManager: public rclcpp::Node {
     private:
         // Map the PIDs of the launch files to the tuple of their required subscriptions and their status
-        std::map<int, std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, std::shared_ptr<GenericSubCallback>>>> bringup_listeners;
+        std::map<int, LaunchData> bringup_listeners;
 
         // parameter values
         std::chrono::seconds startup_timeout = 30s;
