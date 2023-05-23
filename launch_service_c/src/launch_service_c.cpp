@@ -35,18 +35,14 @@ int main(int argc, char **argv)
 {
     // Look for super secret flag to see if this is a child process
     int child_flag_index = -1;
-    std::cout  << "args: ";
     for (int i = 0; i < argc; ++i)
     {
-        std::cout << "'" << argv[i] << "', ";
         if (std::strcmp(SUPER_SECRET_FLAG.c_str(), argv[i]) == 0)
         {
             child_flag_index = i;
             break;
         }
     }
-
-    std::cout << std::endl;
 
     if (child_flag_index >= 0)
     {

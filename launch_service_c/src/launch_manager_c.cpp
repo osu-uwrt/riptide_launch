@@ -174,6 +174,8 @@ void LaunchManager::pub_timer_callback()
                 // grab the goal handle
                 auto gh = active_start_handles.at(pid);
 
+                RCLCPP_ERROR(get_logger(), "Child launch %s shut down while starting", gh->get_goal()->launch_file.c_str());
+
                 // make the result
                 auto result = std::make_shared<launch_msgs::action::BringupStart_Result>();
                 result->pid = pid;
@@ -186,6 +188,8 @@ void LaunchManager::pub_timer_callback()
 
                 // remove the handle as it is no longer active
                 active_start_handles.erase(pid);
+            } else {
+                RCLCPP_WARN(get_logger(), "Child %d stopped", pid);
             }
 
             it = managed_launches.erase(it);
@@ -201,8 +205,10 @@ void LaunchManager::pub_timer_callback()
             auto gh = active_start_handles.at(pid);
 
             // check if the startup has timed out or we cancelled
-            if (it->second->getLaunchTime() > get_clock()->now() - startup_timeout || gh->is_canceling())
+            if (it->second->getLaunchTime() + startup_timeout < get_clock()->now() || gh->is_canceling())
             {
+                RCLCPP_WARN(get_logger(), "Child %d called to terminate during startup", pid);
+
                 // stop the child as it has hit a stop condition
                 it->second->stopChild();
             }
@@ -228,6 +234,8 @@ void LaunchManager::pub_timer_callback()
         {
             // grab the goal handle
             auto gh = active_start_handles.at(pid);
+
+            RCLCPP_INFO(get_logger(), "Child launch %s started", gh->get_goal()->launch_file.c_str());
 
             // make the result and abort
             auto result = std::make_shared<launch_msgs::action::BringupStart_Result>();

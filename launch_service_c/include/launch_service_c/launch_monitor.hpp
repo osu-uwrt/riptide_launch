@@ -28,11 +28,7 @@ namespace launch_manager
     public:
         GenericSubCallback(const std::string &launchTopicName) : topicName(launchTopicName){};
 
-        void callback(std::shared_ptr<rclcpp::SerializedMessage> msg)
-        {
-            (void)msg;
-            hasRecieved = true;
-        };
+        void callback(std::shared_ptr<rclcpp::SerializedMessage> msg);
 
         bool hasRecievedData() { return hasRecieved; };
 

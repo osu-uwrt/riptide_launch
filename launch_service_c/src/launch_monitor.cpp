@@ -35,11 +35,11 @@ namespace launch_manager
     {
         // make the callback group to destroy later
         // this is to fix a subscription bug where successive starts fail to bind properly to their subscriptions
-        rclcpp::CallbackGroup::SharedPtr cbg = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+        callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
         // make a set of options for all the subscribers wer are about to make
         rclcpp::SubscriptionOptions subOpt;
-        subOpt.callback_group = cbg;
+        subOpt.callback_group = callback_group;
 
         // work through each topic in the request and make a generic sub
         for (auto topic : info->topics)
@@ -109,30 +109,20 @@ namespace launch_manager
     void ManagedLaunch::launch()
     {
         // We have to do some fancy conversions to pass the argument list to execv
-        std::vector<const char *> cstrings;
-        cstrings.reserve(execv_args.size());
+        // this violates ISO C, but i dont really know what else to do
+        const char *argv[execv_args.size() + 1];
 
         // move the c strings into the vector for execv
-        for (auto str : execv_args)
+        for (size_t i = 0; i < execv_args.size(); i++)
         {
-            cstrings.push_back(str.c_str());
+            argv[i] = execv_args.at(i).c_str();
         }
-
 
         // null terminate the vector
-        cstrings.push_back(nullptr);
-
-        auto argv = const_cast<char *const *>(cstrings.data());
-
-        std::cout << "child args: '";
-        for(size_t i = 0; i < cstrings.size(); i++){
-            std::cout << argv[i] << ", ";
-        }
-
-        std::cout << "'" << std::endl << std::flush;
+        argv[execv_args.size()] = nullptr;
 
         // If this call succeeds, it should never return.
-        execv("/proc/self/exe", argv);
+        execv("/proc/self/exe", const_cast<char *const *>(argv));
     }
 
     void ManagedLaunch::destroyStartup()
@@ -140,6 +130,9 @@ namespace launch_manager
         // make sure we arent in a state post destruction
         if (launch_state != LaunchState::DEAD && launch_state != LaunchState::FREE_RUNNING)
         {
+
+            std::cout << "Destroyed launch context" << std::endl;
+
             // remove each of the topics for monitoring
             for (auto tuple : subscrips_data)
             {
@@ -250,5 +243,11 @@ namespace launch_manager
         // then make sure the subscriptions are destroyed
         destroyStartup();
     }
+
+    void GenericSubCallback::callback(std::shared_ptr<rclcpp::SerializedMessage> msg)
+    {
+        (void)msg;
+        hasRecieved = true;
+    };
 
 } // namespace launch_manager
