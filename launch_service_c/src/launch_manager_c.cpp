@@ -82,7 +82,7 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
     if (pid == 0)
     {
 
-        RCLCPP_INFO(get_logger(), "Child thread starting");
+        RCLCPP_INFO(get_logger(), "Child process starting");
 
         // start the child, shouldnt return ever
         launch->launch();
@@ -93,7 +93,7 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
     }
     else
     {
-        RCLCPP_INFO(get_logger(), "Parent thread begin monitoring on PID %i", pid);
+        RCLCPP_INFO(get_logger(), "Parent process begin monitoring on PID %i", pid);
 
         // indicate the child was launched and feed pid an start time
         launch->observeLaunch(pid, get_clock()->now());
@@ -128,12 +128,12 @@ void LaunchManager::handle_end_accepted(const std::shared_ptr<rclcpp_action::Ser
 {
     // Signal process to close
     int pid = goal_handle->get_goal()->pid;
-    RCLCPP_DEBUG(get_logger(), "Killing process with PID %d. . .", pid);
 
     // try and stop the child
     if (managed_launches.at(pid)->stopChild())
     {
-        managed_launches.erase(pid);
+        RCLCPP_WARN(get_logger(), "Sent stop signal to child PID %d . . .", pid);
+
         goal_handle->succeed(std::make_shared<launch_msgs::action::BringupEnd_Result>());
     }
     
@@ -188,10 +188,9 @@ void LaunchManager::pub_timer_callback()
 
                 // remove the handle as it is no longer active
                 active_start_handles.erase(pid);
-            } else {
-                RCLCPP_WARN(get_logger(), "Child %d stopped", pid);
             }
 
+            RCLCPP_WARN(get_logger(), "Removing stopped Child %d", pid);
             it = managed_launches.erase(it);
 
             // force the while loop back to the beginning

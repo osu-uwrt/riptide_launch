@@ -130,9 +130,6 @@ namespace launch_manager
         // make sure we arent in a state post destruction
         if (launch_state != LaunchState::DEAD && launch_state != LaunchState::FREE_RUNNING)
         {
-
-            std::cout << "Destroyed launch context" << std::endl;
-
             // remove each of the topics for monitoring
             for (auto tuple : subscrips_data)
             {
@@ -229,7 +226,7 @@ namespace launch_manager
             int err = kill(child_pid, SIGINT);
 
             // make sure the child hasnt already died
-            return (err == -1 && errno == ESRCH);
+            return err == 0;
         }
 
         return true;
