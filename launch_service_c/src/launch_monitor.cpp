@@ -4,6 +4,8 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <ament_index_cpp/get_package_prefix.hpp>
 
+#include <signal.h>
+
 using namespace std::placeholders;
 
 void exec_python(const char *const launch_path, std::vector<std::string> launch_args)
@@ -12,14 +14,15 @@ void exec_python(const char *const launch_path, std::vector<std::string> launch_
     std::string pyline = "launch_a_launch_file(";
     pyline += "launch_file_path='" + std::string(launch_path) + "'";
     pyline += ", launch_file_arguments=[";
-    for(auto arg : launch_args){
+    for (auto arg : launch_args)
+    {
         pyline += "\"" + arg + "\",";
     }
     pyline += "])";
 
     // start the interpreter, import ros2launch then launch the launch
     pybind11::scoped_interpreter guard{};
-    pybind11::exec("from ros2launch.api import launch_a_launch_file"); 
+    pybind11::exec("from ros2launch.api import launch_a_launch_file");
     pybind11::exec(pyline);
 
     std::cout << "Launch file \"" << launch_path << "\" Ended" << std::endl;
@@ -95,9 +98,10 @@ namespace launch_manager
         }
     }
 
-    void ManagedLaunch::observeLaunch(int childPid)
+    void ManagedLaunch::observeLaunch(int childPid, const rclcpp::Time &launch_time)
     {
         child_pid = childPid;
+        start_time = launch_time;
 
         launch_state = LaunchState::MONITORING;
     }

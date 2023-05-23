@@ -1,6 +1,8 @@
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/node.hpp>
+#include <rclcpp/generic_subscription.hpp>
+#include <rclcpp/time.hpp>
 
 #include <launch_msgs/action/bringup_start.hpp>
 
@@ -61,20 +63,21 @@ namespace launch_manager
          * Function to observe startup from the parent process as the child process calling launch cannot
          * tell the parent if it has started
          *
-         * @param childPid -> the pid given to the child
+         * @param childPid    -> the pid given to the child
+         * @param launch_time -> the rclcpp wall time which the child was observed to have started
          */
-        void observeLaunch(int childPid);
+        void observeLaunch(int childPid, const rclcpp::Time &launch_time);
 
         /**
          * Performs the execv child replacement
          * THIS CALL SHOULD NEVER RETURN UNLESS EXECV FAILS!
          */
         void launch(void);
-        
+
         /**
          * Monitors the child pid for startup and run state as well as topic feedback
-         * 
-         * @param uncompleted_topics contains the uncompleted 
+         *
+         * @param uncompleted_topics contains the uncompleted
          *
          * @returns true when the child is fully started
          *
@@ -89,7 +92,7 @@ namespace launch_manager
          */
         bool stopChild();
 
-        
+        rclcpp::Time getLaunchTime(void) { return start_time; };
 
         ~ManagedLaunch();
 
@@ -109,13 +112,13 @@ namespace launch_manager
          */
         void destroyStartup(void);
 
-
         // launch info
         std::vector<std::string> execv_args;
 
         // chlid information
         LaunchState launch_state = LaunchState::SETUP;
         int child_pid = -1;
+        rclcpp::Time start_time;
 
         // topic monitoring feedback
         std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr,

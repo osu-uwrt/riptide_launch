@@ -25,7 +25,7 @@ namespace launch_manager {
     private:
         // Map the PIDs of the launch files to the tuple of their required subscriptions and their status
         std::map<int, std::shared_ptr<ManagedLaunch>> managed_launches;
-        std::vector<std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>>> active_start_handles;
+        std::map<int, std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>>> active_start_handles;
 
         // parameter values
         std::chrono::seconds startup_timeout = 30s;
