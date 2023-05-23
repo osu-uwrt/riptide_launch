@@ -64,10 +64,16 @@ namespace launch_manager
 
             // create the Generic subscription and its counterpart info class
             std::shared_ptr<GenericSubCallback> genSubCb = std::make_shared<GenericSubCallback>(topic.name);
-            rclcpp::GenericSubscription::SharedPtr genSub = node->create_generic_subscription(
-                topic.name, topic.type_name, genSubQos,
-                std::bind(&GenericSubCallback::callback, genSubCb, _1),
-                subOpt);
+            rclcpp::GenericSubscription::SharedPtr genSub;
+            try
+            {
+                genSub = node->create_generic_subscription(
+                    topic.name, topic.type_name, genSubQos,
+                    std::bind(&GenericSubCallback::callback, genSubCb, _1),
+                    subOpt);
+            } catch(const std::runtime_error & e){
+                throw std::runtime_error("topic " + topic.name + " has invalid type " + topic.type_name + " \n\treason: " + e.what());
+            }
 
             // add it to the subscriptions list
             subscrips_data.push_back(std::make_tuple(genSub, genSubCb));
