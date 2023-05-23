@@ -35,7 +35,7 @@ LaunchManager::LaunchManager(const std::string &hostname) : Node(hostname + "_la
                                                             std::bind(&LaunchManager::whois_request, this, _1, _2));
 
     // create the status publish timer
-    publish_timer = create_wall_timer(2s, std::bind(&LaunchManager::pub_timer_callback, this));
+    publish_timer = create_wall_timer(1s, std::bind(&LaunchManager::pub_timer_callback, this));
 }
 
 rclcpp_action::GoalResponse LaunchManager::handle_bringup_goal(const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const launch_msgs::action::BringupStart::Goal> goal)
