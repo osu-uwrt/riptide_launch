@@ -5,7 +5,6 @@
 #include <iostream>
 #include <tinyxml2.h>
 
-#include <pybind11/embed.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -16,43 +15,17 @@
 #include <launch_msgs/action/bringup_start.hpp>
 #include <launch_msgs/srv/who_is.hpp>
 
+#include "launch_service_c/launch_monitor.hpp"
+
 using namespace std::chrono_literals;
 
-
-// Flag passed to process to tell it that it's a child process and should execute a python shell
-const std::string SUPER_SECRET_FLAG = "--exec-python-from-child-super-secret-no-backsies";
-
-// Execute python. Must be called ONLY in the child process
-void exec_python(const char * const launch_path, const std::vector<std::string> launch_args);
-
 namespace launch_manager {
-    class GenericSubCallback {
-    private: 
-        bool hasRecieved = false;
-        int pid = 0;
-        std::string topicName;
-    public:
-        GenericSubCallback(int childPid, const std::string& launchTopicName): pid(childPid), topicName(launchTopicName) {};
-
-        void callback(std::shared_ptr<rclcpp::SerializedMessage> msg);
-
-        bool hasRecievedData() {return hasRecieved;};
-
-        const std::string &getTopicName() {return topicName;};
-
-    };
-
-    struct LaunchData {
-        std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr, 
-            std::shared_ptr<GenericSubCallback>>> subsData;
-        bool readyDelete;
-        rclcpp::CallbackGroup::SharedPtr cbg;
-    };
 
     class LaunchManager: public rclcpp::Node {
     private:
         // Map the PIDs of the launch files to the tuple of their required subscriptions and their status
-        std::map<int, LaunchData> bringup_listeners;
+        std::map<int, std::shared_ptr<ManagedLaunch>> managed_launches;
+        std::vector<std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>>> active_start_handles;
 
         // parameter values
         std::chrono::seconds startup_timeout = 30s;
@@ -82,7 +55,6 @@ namespace launch_manager {
         // helper functions
         void monitor_child_start(pid_t child, const std::shared_ptr<rclcpp_action::ServerGoalHandle<launch_msgs::action::BringupStart>> goal_handle);
 
-        // Some form of XML document that contains relivent 
     public:
         LaunchManager(const std::string &hostname);
     };

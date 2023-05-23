@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "launch_service_c/launch_manager_c.h"
+#include "launch_service_c/launch_monitor.hpp"
 
 #define MAX_HOST_LEN 300
 
