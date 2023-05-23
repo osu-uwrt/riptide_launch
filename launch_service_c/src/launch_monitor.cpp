@@ -156,7 +156,7 @@ namespace launch_manager
         int err = kill(child_pid, 0);
 
         // if err is -1, there is some kind of problem
-        if (err = -1)
+        if (err == -1)
         {
             // make sure we have perms to contact the dead child
             if (errno == EPERM)
@@ -228,6 +228,8 @@ namespace launch_manager
             // make sure the child hasnt already died
             return (err == -1 && errno == ESRCH);
         }
+
+        return true;
     }
 
     ManagedLaunch::~ManagedLaunch()
