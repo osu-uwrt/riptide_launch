@@ -74,22 +74,22 @@ namespace launch_manager
         }
 
         // now save the pkg info
-        std::string packagePath = info->launch_package;
+        std::string launch_path = info->launch_package;
 
         // if the package doesnt have a / in it, resolve it
         if (info->launch_package.find('/') == std::string::npos)
         {
-            packagePath = ament_index_cpp::get_package_share_directory(info->launch_package) + "/launch";
+            launch_path = ament_index_cpp::get_package_share_directory(info->launch_package) + "/launch";
         }
 
         // resolve to the launch file
-        packagePath += "/" + info->launch_file;
+        launch_path += "/" + info->launch_file;
 
         // collect launch arguments for execv
         execv_args = {
             "launch_service_c",
             SUPER_SECRET_FLAG,
-            packagePath};
+            launch_path};
 
         // form the arguments
         for (size_t i = 0; i < info->arg_keys.size(); ++i)
@@ -118,11 +118,21 @@ namespace launch_manager
             cstrings.push_back(str.c_str());
         }
 
+
         // null terminate the vector
         cstrings.push_back(nullptr);
 
+        auto argv = const_cast<char *const *>(cstrings.data());
+
+        std::cout << "child args: '";
+        for(size_t i = 0; i < cstrings.size(); i++){
+            std::cout << argv[i] << ", ";
+        }
+
+        std::cout << "'" << std::endl << std::flush;
+
         // If this call succeeds, it should never return.
-        execv("/proc/self/exe", const_cast<char *const *>(cstrings.data()));
+        execv("/proc/self/exe", argv);
     }
 
     void ManagedLaunch::destroyStartup()
