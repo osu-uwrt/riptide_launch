@@ -65,11 +65,13 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
     catch (ament_index_cpp::PackageNotFoundError &e)
     {
         RCLCPP_ERROR(get_logger(), "BringupStart message contains a topic from an unknown package: \"%s\"", e.package_name.c_str());
+        goal_handle->abort(std::make_shared<launch_msgs::action::BringupStart_Result>());
         return;
     }
     catch (std::runtime_error &e)
     {
         RCLCPP_ERROR(get_logger(), "A topic contains a non existant topic type: \"%s\"", e.what());
+        goal_handle->abort(std::make_shared<launch_msgs::action::BringupStart_Result>());
         return;
     }
 
@@ -82,7 +84,7 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
 
         RCLCPP_INFO(get_logger(), "Child thread starting");
 
-        // start the child
+        // start the child, shouldnt return ever
         launch->launch();
 
         // execl failed. Print fatal error, abort the child
@@ -93,11 +95,12 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
     {
         RCLCPP_INFO(get_logger(), "Parent thread begin monitoring on PID %i", pid);
 
-        launch->observeLaunch(pid);
+        // indicate the child was launched and feed pid an start time
+        launch->observeLaunch(pid, get_clock()->now());
 
         // add the PID to the list of processes to track, and the goal handle to the list of handles
         managed_launches.emplace(pid, launch);
-        active_start_handles.push_back(goal_handle);
+        active_start_handles.emplace(pid, goal_handle);
     }
 }
 
@@ -106,9 +109,7 @@ rclcpp_action::GoalResponse LaunchManager::handle_end_goal(const rclcpp_action::
     (void)uuid;
     // Ensure PID is within the bringup_listeners before accepting
     if (managed_launches.find(goal->pid) != managed_launches.end())
-    {
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-    }
 
     RCLCPP_ERROR(get_logger(), "Process with PID %d is not a child of the launch monitor. Rejecting goal. . .", goal->pid);
     return rclcpp_action::GoalResponse::REJECT;
@@ -127,20 +128,20 @@ void LaunchManager::handle_end_accepted(const std::shared_ptr<rclcpp_action::Ser
 {
     // Signal process to close
     int pid = goal_handle->get_goal()->pid;
-    auto result = std::make_shared<launch_msgs::action::BringupEnd_Result>();
-
     RCLCPP_DEBUG(get_logger(), "Killing process with PID %d. . .", pid);
 
-    if (!managed_launches[pid]->stopChild())
+    // try and stop the child
+    if (managed_launches.at(pid)->stopChild())
     {
-        RCLCPP_ERROR(get_logger(), "Process with PID %d does not exist or is already terminating.", pid);
-        goal_handle->abort(result);
+        managed_launches.erase(pid);
+        goal_handle->succeed(std::make_shared<launch_msgs::action::BringupEnd_Result>());
     }
+    
+    // the child was already dead or failed to stop
     else
     {
-        // otherwise the child should be stopping
-        managed_launches.erase(pid);
-        goal_handle->succeed(result);
+        RCLCPP_ERROR(get_logger(), "Process with PID %d does not exist or is already terminating.", pid);
+        goal_handle->abort(std::make_shared<launch_msgs::action::BringupEnd_Result>());
     }
 }
 
@@ -156,18 +157,94 @@ void LaunchManager::pub_timer_callback()
     auto it = managed_launches.begin();
     while (it != managed_launches.end())
     {
+        std::vector<std::string> unpublished_topics;
+
         // pull managed launch data
         int pid = it->first;
-        std::shared_ptr<ManagedLaunch> launch = it->second;
+        LaunchState status = it->second->checkState(unpublished_topics);
 
-        // if state is setup, continute to next item
-        if (!launch->isRunning())
+        // the most important check is dead as we must remove it
+        if (status == LaunchState::DEAD)
         {
-            it++;
+            // can get here from 4 cases, launch dies on its own, a cancel, a start abort, or a end request
+
+            // if we have an active start handle for the PID, close it out
+            if (active_start_handles.find(pid) != active_start_handles.end())
+            {
+                // grab the goal handle
+                auto gh = active_start_handles.at(pid);
+
+                // make the result
+                auto result = std::make_shared<launch_msgs::action::BringupStart_Result>();
+                result->pid = pid;
+
+                // goto the correct exit state for the active handle
+                if (gh->is_canceling())
+                    gh->canceled(result);
+                else
+                    gh->abort(result);
+
+                // remove the handle as it is no longer active
+                active_start_handles.erase(pid);
+            }
+
+            it = managed_launches.erase(it);
+
+            // force the while loop back to the beginning
             continue;
         }
 
-        // if we are in the monitoring state, check the child
+        // if state is monitoring, update the monitoring system
+        else if (status == LaunchState::MONITORING)
+        {
+            // grab the goal handle
+            auto gh = active_start_handles.at(pid);
+
+            // check if the startup has timed out or we cancelled
+            if (it->second->getLaunchTime() > get_clock()->now() - startup_timeout || gh->is_canceling())
+            {
+                // stop the child as it has hit a stop condition
+                it->second->stopChild();
+            }
+
+            // send the feedback as we have not yet timed out
+            else
+            {
+                // make the feedback message
+                auto msg = std::make_shared<launch_msgs::action::BringupStart_Feedback>();
+
+                // fill out the data
+                msg->uncompleted_topic_names = unpublished_topics;
+                msg->expected_topics = gh->get_goal()->topics.size();
+                msg->completed_topics = msg->expected_topics - unpublished_topics.size();
+
+                // send the feedback
+                gh->publish_feedback(msg);
+            }
+        }
+
+        // if the state is now running, we can complete the goal handle
+        else if (status == LaunchState::RUNNING)
+        {
+            // grab the goal handle
+            auto gh = active_start_handles.at(pid);
+
+            // make the result and abort
+            auto result = std::make_shared<launch_msgs::action::BringupStart_Result>();
+            result->pid = pid;
+
+            gh->succeed(result);
+
+            // remove the handle as it is no longer active
+            active_start_handles.erase(pid);
+        }
+
+        // pid is active if it is not setup and not dead, so report it
+        if (status != LaunchState::SETUP && status != LaunchState::DEAD)
+            launchesMsg.pids.push_back(pid);
+
+        // bump the iterator for everything but dead
+        it++;
     }
 
     RCLCPP_DEBUG(get_logger(), "Checked for pid updates");
