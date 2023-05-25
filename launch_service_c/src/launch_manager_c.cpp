@@ -2,6 +2,8 @@
 
 #include <ament_index_cpp/get_package_prefix.hpp>
 
+#include <unistd.h>
+
 using namespace launch_manager;
 using namespace std::placeholders;
 using namespace std::chrono_literals;
