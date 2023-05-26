@@ -54,9 +54,6 @@ def generate_launch_description():
     # setup a list to collect launch descriptions
     ns_descrips = []
 
-    # setup a namespace to put everything in
-    ns_descrips.append(PushRosNamespace(robot_name))
-
     # iterate the list of launch files we were given to start
     for launch_file in ns_launch_files:
         ns_descrips.append(
