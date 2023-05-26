@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "launch_service_c/launch_manager_c.h"
+#include "launch_service_c/launch_monitor.hpp"
 
 #define MAX_HOST_LEN 300
 
@@ -64,7 +65,7 @@ int main(int argc, char **argv)
         }
         // Create extra launch arguments
         std::vector<std::string> launch_args;
-        for (size_t i = child_flag_index + 2; i < argc; ++i)
+        for (int i = child_flag_index + 2; i < argc; ++i)
         {
             launch_args.push_back(argv[i]);
         }
