@@ -52,7 +52,7 @@ def generate_launch_description():
                 'dvl_sonar1',
                 'dvl_sonar2',
                 'dvl_sonar3',
-                'depth/raw',
+                'state/depth/raw',
                 'depth/pose',
                 'imu/data',
                 '/tf',

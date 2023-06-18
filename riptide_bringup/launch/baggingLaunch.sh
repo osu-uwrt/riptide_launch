@@ -44,7 +44,7 @@ case $1 in
             /tempest/dvl/dvl_sonar1 \
             /tempest/dvl/dvl_sonar2 \
             /tempest/dvl/dvl_sonar3 \
-            /tempest/depth/raw \
+            /tempest/state/depth/raw \
             /tempest/depth/pose \
             /tempest/imu/data \
             /tf \
@@ -67,7 +67,7 @@ case $1 in
             dvl_sonar1 \
             dvl_sonar2 \
             vl_sonar3 \
-            depth/raw \
+            state/depth/raw \
             depth/pose \
             imu/data \
             /tf
