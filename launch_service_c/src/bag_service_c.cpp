@@ -63,7 +63,7 @@ int main(int argc, char **argv)
         }
 
         // start the child!
-        int child = launch_manager::BagNode::main(launch_args);
+        int child = launch_manager::bag_record_main(launch_args);
 
         std::cout << "Child exiting with code " << child << std::endl;
 
