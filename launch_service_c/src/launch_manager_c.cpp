@@ -138,7 +138,7 @@ void LaunchManager::handle_end_accepted(const std::shared_ptr<rclcpp_action::Ser
 
         goal_handle->succeed(std::make_shared<launch_msgs::action::BringupEnd_Result>());
     }
-    
+
     // the child was already dead or failed to stop
     else
     {
@@ -149,6 +149,21 @@ void LaunchManager::handle_end_accepted(const std::shared_ptr<rclcpp_action::Ser
 
 void LaunchManager::whois_request(const std::shared_ptr<launch_msgs::srv::WhoIs::Request> request, std::shared_ptr<launch_msgs::srv::WhoIs::Response> response)
 {
+    // work through the requested pids
+    for (auto pid : request->pids)
+    {
+        // check that the PIDS are in the map.
+        if (managed_launches.find(pid) != managed_launches.end())
+        {
+            // if we have it, give the name
+            response->names.push_back(managed_launches[pid]->getLaunchName());
+        }
+        else
+        {
+            // otherwise say its dead
+            response->names.push_back("DEAD");
+        }
+    }
 }
 
 void LaunchManager::pub_timer_callback()

@@ -37,6 +37,8 @@ namespace launch_manager
         // this is to fix a subscription bug where successive starts fail to bind properly to their subscriptions
         callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
+        launch_name = info->launch_file;
+
         // make a set of options for all the subscribers wer are about to make
         rclcpp::SubscriptionOptions subOpt;
         subOpt.callback_group = callback_group;

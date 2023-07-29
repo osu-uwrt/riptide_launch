@@ -92,7 +92,9 @@ namespace launch_manager
          */
         bool stopChild();
 
-        rclcpp::Time getLaunchTime(void) { return start_time; };
+        rclcpp::Time getLaunchTime(void) { return start_time; }
+
+        std::string getLaunchName(void) {return launch_name; }
 
         ~ManagedLaunch();
 
@@ -119,6 +121,7 @@ namespace launch_manager
         LaunchState launch_state = LaunchState::SETUP;
         int child_pid = -1;
         rclcpp::Time start_time;
+        std::string launch_name = "";
 
         // topic monitoring feedback
         std::vector<std::tuple<rclcpp::GenericSubscription::SharedPtr,
