@@ -20,6 +20,8 @@ find_package(rclcpp_action REQUIRED)
 find_package(launch_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(rosbag2_transport REQUIRED)
+
 
 add_executable(launch_service_c src/launch_service_c.cpp src/launch_manager_c.cpp src/launch_monitor.cpp)
 target_include_directories(launch_service_c PUBLIC
@@ -46,6 +48,7 @@ ament_target_dependencies(bag_service_c
   rclcpp
   launch_msgs
   rosbag2_cpp
+  rosbag2_transport
 )
 
 install(TARGETS launch_service_c bag_service_c
