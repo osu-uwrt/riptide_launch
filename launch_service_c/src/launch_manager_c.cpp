@@ -62,7 +62,7 @@ void LaunchManager::handle_bringup_accepted(const std::shared_ptr<rclcpp_action:
 
     try
     {
-        launch = std::make_shared<ManagedLaunch>(this->shared_from_this(), goal_handle->get_goal());
+        launch = std::make_shared<ManagedLaunch>(goal_handle->get_goal());
     }
     catch (ament_index_cpp::PackageNotFoundError &e)
     {

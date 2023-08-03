@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <fstream>
 #include <csignal>
 #include <unistd.h>
@@ -33,6 +34,28 @@ const std::string get_hostname()
 
 int main(int argc, char **argv)
 {
+    // Check for secret monitor mode flag
+    if (argc > 1 && std::strcmp(MONITOR_SECRET_FLAG.c_str(), argv[1]) == 0) {
+        if (argc <= 5) {
+            std::cerr << "Invalid syntax" << std::endl;
+            return 1;
+        }
+
+        int pipefd;
+        try {
+            size_t posOut;
+            pipefd = std::stoi(argv[2], &posOut);
+            if (posOut != strlen(argv[2])) throw std::runtime_error("");
+        } catch (...) {
+            std::cout << "Failed to parse fd arg" << std::endl;
+            return 1;
+        }
+
+        std::cout << "Starting child monitor node..." << std::endl;
+
+        return startMonitorChildNode(pipefd, argc-3, &argv[3]);
+    }
+
     // Look for super secret flag to see if this is a child process
     int child_flag_index = -1;
     for (int i = 0; i < argc; ++i)
@@ -47,7 +70,7 @@ int main(int argc, char **argv)
     if (child_flag_index >= 0)
     {
         // CHILD PROCESS
-        std::cout << "Starting child. . .\n";
+        std::cout << "Starting child launch. . .\n";
 
         // Check if there are enough arguments passed through for there to be a launch argument
         if (argc < child_flag_index + 2)
