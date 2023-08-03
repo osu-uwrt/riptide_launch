@@ -22,7 +22,6 @@ find_package(ament_index_cpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 
-
 add_executable(launch_service_c src/launch_service_c.cpp src/launch_manager_c.cpp src/launch_monitor.cpp src/launch_monitor_child.cpp)
 target_include_directories(launch_service_c PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
