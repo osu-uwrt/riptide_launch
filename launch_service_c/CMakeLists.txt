@@ -21,14 +21,14 @@ find_package(launch_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 
-add_executable(launch_service_c src/launch_service_c.cpp src/launch_manager_c.cpp src/launch_monitor.cpp)
+add_executable(launch_service_c src/launch_service_c.cpp src/launch_manager_c.cpp src/launch_monitor.cpp src/launch_monitor_child.cpp)
 target_include_directories(launch_service_c PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_features(launch_service_c PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 target_link_libraries(pybind11::embed)
 
-ament_target_dependencies(launch_service_c  
+ament_target_dependencies(launch_service_c
   pybind11
   rclcpp
   rclcpp_action
@@ -42,7 +42,7 @@ target_include_directories(bag_service_c PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_compile_features(bag_service_c PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
-ament_target_dependencies(bag_service_c  
+ament_target_dependencies(bag_service_c
   rclcpp
   launch_msgs
   rosbag2_cpp
