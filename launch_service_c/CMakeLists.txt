@@ -6,6 +6,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 set(PYTHON_EXECUTABLE "/usr/bin/python3")
+set(PYBIND11_PYTHON_VERSION "3.8")
 
 # find dependencies
 find_package(pybind11_vendor REQUIRED)
@@ -22,15 +23,14 @@ find_package(ament_index_cpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 
-
-add_executable(launch_service_c src/launch_service_c.cpp src/launch_manager_c.cpp src/launch_monitor.cpp)
+add_executable(launch_service_c src/launch_service_c.cpp src/launch_manager_c.cpp src/launch_monitor.cpp src/launch_monitor_child.cpp)
 target_include_directories(launch_service_c PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_features(launch_service_c PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 target_link_libraries(launch_service_c pybind11::embed)
 
-ament_target_dependencies(launch_service_c  
+ament_target_dependencies(launch_service_c
   pybind11
   rclcpp
   rclcpp_action
@@ -44,7 +44,7 @@ target_include_directories(bag_service_c PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_compile_features(bag_service_c PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
-ament_target_dependencies(bag_service_c  
+ament_target_dependencies(bag_service_c
   rclcpp
   launch_msgs
   rosbag2_cpp

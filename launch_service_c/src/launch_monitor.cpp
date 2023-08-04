@@ -31,54 +31,45 @@ void exec_python(const char *const launch_path, std::vector<std::string> launch_
 namespace launch_manager
 {
 
-    ManagedLaunch::ManagedLaunch(const rclcpp::Node::SharedPtr node, std::shared_ptr<const launch_msgs::action::BringupStart_Goal> info)
+    ManagedLaunch::ManagedLaunch(std::shared_ptr<const launch_msgs::action::BringupStart_Goal> info)
     {
-        // make the callback group to destroy later
-        // this is to fix a subscription bug where successive starts fail to bind properly to their subscriptions
-        callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+        std::vector<std::string> monitorArgs;
 
-        launch_name = info->launch_file;
+        // Calculate args to pass to monitor subprocess
+        // This walks through each topic and creates the required argument format
+        // Each topic requires a topic name, type, and QoS argument
+        uint8_t idx = 1;
+        for (auto topic : info->topics) {
+            if (idx == 0) throw std::runtime_error("Too many topics requested to subscribe");
 
-        // make a set of options for all the subscribers wer are about to make
-        rclcpp::SubscriptionOptions subOpt;
-        subOpt.callback_group = callback_group;
+            // Create monitor idx to topic name map, and keep track of which topics we still have to discover
+            topicIdxMap.emplace(idx, topic.name);
+            waitingTopics.push_back(idx++);
 
-        // work through each topic in the request and make a generic sub
-        for (auto topic : info->topics)
-        {
-            // determine the QOS from the info we were given
-            rclcpp::QoS genSubQos = rclcpp::SensorDataQoS();
+            monitorArgs.push_back(topic.name);
+            monitorArgs.push_back(topic.type_name);
             switch (topic.qos_type)
             {
             case launch_msgs::msg::TopicData::QOS_SENSOR_DATA:
-                genSubQos = rclcpp::SensorDataQoS();
+                monitorArgs.push_back("sensor_data");
                 break;
 
             case launch_msgs::msg::TopicData::QOS_SYSTEM_DEFAULT:
-                genSubQos = rclcpp::SystemDefaultsQoS();
+                monitorArgs.push_back("system_default");
                 break;
 
             default:
-                genSubQos = rclcpp::SystemDefaultsQoS();
-                RCLCPP_ERROR(node->get_logger(), "Unknown QOS type sent during request, "
-                                                 "check that the QOS type matches the available options");
+                throw std::runtime_error("Unknown QOS type sent during request: " + std::to_string(topic.qos_type) +
+                                                 ", check that the QOS type matches the available options");
             }
+        }
 
-            // create the Generic subscription and its counterpart info class
-            std::shared_ptr<GenericSubCallback> genSubCb = std::make_shared<GenericSubCallback>(topic.name);
-            rclcpp::GenericSubscription::SharedPtr genSub;
-            try
-            {
-                genSub = node->create_generic_subscription(
-                    topic.name, topic.type_name, genSubQos,
-                    std::bind(&GenericSubCallback::callback, genSubCb, _1),
-                    subOpt);
-            } catch(const std::runtime_error & e){
-                throw std::runtime_error("topic " + topic.name + " has invalid type " + topic.type_name + " \n\treason: " + e.what());
-            }
-
-            // add it to the subscriptions list
-            subscrips_data.push_back(std::make_tuple(genSub, genSubCb));
+        if (monitorArgs.size() > 0) {
+            // Launch the monitor subprocess
+            monitorProcess = std::make_shared<MonitorChildProc>(monitorArgs);
+        }
+        else {
+            monitorProcess = nullptr;
         }
 
         // now save the pkg info
@@ -117,8 +108,7 @@ namespace launch_manager
     void ManagedLaunch::launch()
     {
         // We have to do some fancy conversions to pass the argument list to execv
-        // this violates ISO C, but i dont really know what else to do
-        const char *argv[execv_args.size() + 1];
+        const char **argv = new const char*[execv_args.size() + 1];
 
         // move the c strings into the vector for execv
         for (size_t i = 0; i < execv_args.size(); i++)
@@ -136,21 +126,9 @@ namespace launch_manager
     void ManagedLaunch::destroyStartup()
     {
         // make sure we arent in a state post destruction
-        if (launch_state != LaunchState::DEAD && launch_state != LaunchState::FREE_RUNNING)
+        if (monitorProcess != nullptr)
         {
-            // remove each of the topics for monitoring
-            for (auto tuple : subscrips_data)
-            {
-                // remove the subscription, then the callback
-                std::get<0>(tuple).reset();
-                std::get<1>(tuple).reset();
-            }
-
-            // now clear the vector
-            subscrips_data.clear();
-
-            // anihilate the callback group
-            callback_group.reset();
+            monitorProcess.reset();
         }
     }
 
@@ -194,23 +172,51 @@ namespace launch_manager
         // if we are in monitoring check on the system and transition as needed
         else if (launch_state == LaunchState::MONITORING)
         {
-            // clear the unpublished list to handle the next update
-            uncompleted_topics.clear();
+            if (monitorProcess != nullptr) {
+                // First check what the child monitor has to report
+                std::vector<uint8_t> discoveredTopicIdxs;
+                if (monitorProcess->getDiscoveredTopics(discoveredTopicIdxs)) {
+                    // Remove any topics we recently discovered from the waiting list
+                    for (auto topicIdx : discoveredTopicIdxs) {
+                        auto itr = waitingTopics.begin();
+                        while (itr != waitingTopics.end()) {
+                            if (*itr == topicIdx) {
+                                itr = waitingTopics.erase(itr);
+                            }
+                            else {
+                                itr++;
+                            }
+                        }
 
-            // check each of the topics to see if they have been recieved
-            for (auto tuple : subscrips_data)
-            {
-                if (!std::get<1>(tuple)->hasRecievedData())
-                {
-                    uncompleted_topics.push_back(std::get<1>(tuple)->getTopicName());
+                    }
+
+                    // clear the unpublished list to handle the next update
+                    uncompleted_topics.clear();
+
+                    // check each of the topics to see if they have been recieved
+                    for (auto waitingIdx : waitingTopics)
+                    {
+                        uncompleted_topics.push_back(topicIdxMap.at(waitingIdx));
+                    }
+
+                    // when the uncompleted topic count hits zero we are done and the child is running
+                    if (uncompleted_topics.size() == 0)
+                    {
+                        // move to running state
+                        launch_state = LaunchState::RUNNING;
+                    }
                 }
-            }
-
-            // when the uncompleted topic count hits zero we are done and the child is running
-            if (uncompleted_topics.size() == 0)
-            {
-                // move to running state
+                else {
+                    // If the monitor died, just kill the launch
+                    stopChild();
+                    destroyStartup();
+                    launch_state = LaunchState::DEAD;
+                }
+            } else {
+                // No topics to monitor, go directly to free running
+                uncompleted_topics.clear();
                 launch_state = LaunchState::RUNNING;
+                std::cout << "Entering free running directly" << std::endl;
             }
         }
 
@@ -230,6 +236,7 @@ namespace launch_manager
         // check if the child is running
         if (isRunning())
         {
+            std::cout << "Stopping child..." << std::endl;
             // send the child pid a sigint
             int err = kill(child_pid, SIGINT);
 
@@ -248,11 +255,5 @@ namespace launch_manager
         // then make sure the subscriptions are destroyed
         destroyStartup();
     }
-
-    void GenericSubCallback::callback(std::shared_ptr<rclcpp::SerializedMessage> msg)
-    {
-        (void)msg;
-        hasRecieved = true;
-    };
 
 } // namespace launch_manager

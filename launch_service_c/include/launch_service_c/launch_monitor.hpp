@@ -6,16 +6,23 @@
 
 #include <launch_msgs/action/bringup_start.hpp>
 
+#include <list>
+#include <memory>
 #include <vector>
 #include <string>
+#include <unordered_map>
 #include <filesystem>
 #include <sstream>
 
 // Flag passed to process to tell it that it's a child process and should execute a python shell
 const std::string SUPER_SECRET_FLAG = "--exec-python-from-child-super-secret-no-backsies";
+const std::string MONITOR_SECRET_FLAG = "--exec-in-monitor-mode-super-secret-no-backsies";
 
 // Execute python. Must be called ONLY in the child process
 void exec_python(const char *const launch_path, const std::vector<std::string> launch_args);
+
+// Execute monitor child node. Must be called ONLY in the child process
+int startMonitorChildNode(int pipefd, int argc, char** topic_args);
 
 namespace launch_manager
 {
@@ -24,15 +31,31 @@ namespace launch_manager
     private:
         bool hasRecieved = false;
         std::string topicName;
+        uint8_t topicIdx;
+        int pipefd;
 
     public:
-        GenericSubCallback(const std::string &launchTopicName) : topicName(launchTopicName){};
+        GenericSubCallback(const std::string &launchTopicName, int pipefd, uint8_t topicIdx):
+            topicName(launchTopicName), topicIdx(topicIdx), pipefd(pipefd){};
 
         void callback(std::shared_ptr<rclcpp::SerializedMessage> msg);
 
         bool hasRecievedData() { return hasRecieved; };
 
         const std::string &getTopicName() { return topicName; };
+    };
+
+    class MonitorChildProc {
+    public:
+        MonitorChildProc(std::vector<std::string> const& args);
+        ~MonitorChildProc();
+
+        bool getDiscoveredTopics(std::vector<uint8_t> &idxOut);  // Checks if process is a live and returns list of discovered topics
+                                                                 // If false is returned, the monitor has died
+
+    private:
+        pid_t monitorPid;
+        int pipeFd;
     };
 
     enum LaunchState
@@ -51,13 +74,12 @@ namespace launch_manager
         /**
          * Sets up monitoring infrastructure for starting and monitoring a child launch file
          *
-         * @param node -> a shared pointer to the node instance to create subscribers with
          * @param info -> a struct containing all of the launch information
          *
          * @throws ament_index_cpp::PackageNotFoundError if any of the message types or launch package cannot be resolved
          * @throws std::runtime_error if the topic type does not exist within the specified message package
          */
-        ManagedLaunch(const rclcpp::Node::SharedPtr node, std::shared_ptr<const launch_msgs::action::BringupStart_Goal> info);
+        ManagedLaunch(std::shared_ptr<const launch_msgs::action::BringupStart_Goal> info);
 
         /**
          * Function to observe startup from the parent process as the child process calling launch cannot
@@ -129,5 +151,9 @@ namespace launch_manager
             subscrips_data;
 
         rclcpp::CallbackGroup::SharedPtr callback_group;
+
+        std::shared_ptr<MonitorChildProc> monitorProcess;
+        std::unordered_map<uint8_t, std::string> topicIdxMap;
+        std::list<uint8_t> waitingTopics;
     };
 } // launch_manager
