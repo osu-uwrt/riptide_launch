@@ -34,4 +34,38 @@ launches: [
     topics: [
     ]
   },
+  {
+    package: "riptide_controllers2",
+    file: "controller.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [
+      "/talos/controller/state"
+    ]
+  },
+  {
+    package: "tensor_detector",
+    file: "tensorrt.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
+  },
+  {
+    package: "riptide_mapping2",
+    file: mapping.launch.py,
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
+  },
+  {
+    package: "riptide_autonomy2",
+    file: "autonomy.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
+  }
 ]
