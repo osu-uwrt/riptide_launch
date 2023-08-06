@@ -27,9 +27,12 @@ class ParentServer:
         self.subprocs = {}
     
     def handle_launch_spawn(self, launch_pkg: str, launch_file: str, topics: List[str]):
+        dict_name = launch_pkg+launch_file
+        
         # launch fork
         popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_LAUNCH_FLAG]
         popen_args.extend([launch_pkg, launch_file])
+        popen_args.extend(self.launches[dict_name]["args"])
         launch_subproc = subprocess.Popen(popen_args)
 
         popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_MONITOR_FLAG]
@@ -38,7 +41,7 @@ class ParentServer:
         flags = fcntl.fcntl(monitor_subproc.stdout.fileno(), fcntl.F_GETFL)
         fcntl.fcntl(monitor_subproc.stdout.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-        dict_name = launch_pkg+launch_file
+        
         self.subprocs[dict_name] = {"launch_subproc": launch_subproc, "monitor_subproc": monitor_subproc}
         self.launches[dict_name]["running"] = True
         self.launches[dict_name]["error"] = False
@@ -137,7 +140,7 @@ class ParentServer:
                             elif parent_self.is_starting(name):
                                 # check for starting
                                 monitor_out = parent_self.subprocs[name]["monitor_subproc"].stdout.read(1)
-                                while monitor_out is not None:
+                                while monitor_out is not None and len(monitor_out) > 0:
                                         parent_self.subprocs[name]["topics_reporting"].add(monitor_out[0])
                                         monitor_out = parent_self.subprocs[name]["monitor_subproc"].stdout.read(1)
 
@@ -218,6 +221,8 @@ def main():
 
         # look for args now
         args = sys.argv[arg_begin_idx :]
+
+        print(f"args: {args}")
         
         # launch the actual launch file with the CLI api
         launch_a_launch_file(
@@ -266,6 +271,7 @@ def main():
                     "topics_found": 0,
                     "topics_count": len(launch["topics"]) / 3,
                     "topics_data": launch["topics"],
+                    "args": launch["args"]
                 }
 
         server = ParentServer(launch_map)
