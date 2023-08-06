@@ -229,6 +229,7 @@
             </tbody>
 
         </table>
+        <button onclick="if(confirm('Are you SURE you want to restart?')) {restartClicked()}">Restart Orin</button>"
 
     </main>
 
@@ -466,7 +467,9 @@
 
 
 
-
+        function restartClicked() {
+            fetch(url_root + "/restart", { method: "POST" }).catch(error => alert("Error issuing restart:\n"+error));
+        }
 
         function startClicked(launchId) {
 
