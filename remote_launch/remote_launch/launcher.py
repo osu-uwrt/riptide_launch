@@ -1,6 +1,6 @@
 # Python 3 server example
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import time, os, sys, subprocess, json, yaml
+import time, os, sys, subprocess, json, yaml, signal
 from typing import List
 
 from ros2launch.api import launch_a_launch_file
@@ -14,79 +14,129 @@ import uuid
 
 SUPER_SECRET_LAUNCH_FLAG = "--super-secret-forking-flag"
 SUPER_SECRET_MONITOR_FLAG = "--super-secret-monitoring-flag"
+TIMEOUT = 15.0
 
 hostName = "0.0.0.0"
 serverPort = 8080
 
 PAGE_HTML_PATH = os.path.join(get_package_share_directory("remote_launch"), "pages", "page.html")
 
-class MyServer(BaseHTTPRequestHandler):
-    def __init__(self, request, client_address, server) -> None:
-        super().__init__(request, client_address, server)
-
-    # can it!
-    def log_message(self, msg, * args, ** kwargs):
-        pass
-
-    def do_POST(self):
-        # this route allows spawning the launch
-        if self.path.split("?")[0] == "/start_launch":
-            i = self.path.index ( "?" ) + 1
-            params = dict ( [ tuple ( p.split("=") ) for p in self.path[i:].split ( "&" ) ] )
-
+class ParentServer:
+    def __init__(self, launches) -> None:
+        self.launches = launches
+        self.subprocs = {}
     
-
-
-        # this route allows stopping a launch
-        elif self.path.split("?")[0] == "/stop_launch":
-            i = self.path.index ( "?" ) + 1
-            params = dict ( [ tuple ( p.split("=") ) for p in self.path[i:].split ( "&" ) ] )
-
-
-    def do_GET(self):
-        # this route serves the page
-        if self.path == "/":
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            with open(PAGE_HTML_PATH, "rb") as f:
-                self.wfile.write(f.read()) 
-
-        # this route allows the webserver to retrieve state
-        elif self.path == "/status":
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-
-            data = [{
-                "id": "mything",
-                "friendly_name": "My Thing",
-                "error": "true",
-                "running": "true",
-                "topics_found": 2,
-                "topics_count": 8
-            }]
-
-            self.wfile.write(json.dumps(data).encode())   
-    
-    def handle_launch_spawn():
+    def handle_launch_spawn(self, launch_pkg: str, launch_file: str, topics: List[str]):
         # launch fork
-        fork_val = os.fork() 
-        if fork_val == 0:
-            launch_subproc = subprocess.Popen(["/proc/self/exe", __file__, SUPER_SECRET_LAUNCH_FLAG, "dummy_robot_bringup", "dummy_robot_bringup.launch.py"])
+        popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_LAUNCH_FLAG]
+        popen_args.extend([launch_pkg, launch_file])
+        launch_subproc = subprocess.Popen(popen_args)
 
-        elif fork_val < 0:
-            print("Fork failed to spawn launch ")
+        popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_MONITOR_FLAG]
+        popen_args.extend(topics)
+        monitor_subproc = subprocess.Popen(popen_args)
 
-        else:
-            # monitor fork
-            fork_val = os.fork() 
-            if fork_val == 0:
-                monitor_subproc = subprocess.Popen(["/proc/self/exe", __file__, SUPER_SECRET_MONITOR_FLAG, "/rosout", "rcl_interfaces/msg/Log", "0"])
+        dict_name = launch_pkg+launch_file
+        self.subprocs[dict_name] = {"launch_subproc": launch_subproc, "monitor_subproc": monitor_subproc}
+        self.launches[dict_name]["running"] = True
+        self.launches[dict_name]["error"] = False
 
-            elif fork_val < 0:
-                print("Fork failed to spawn monitor ")
+
+
+    def handle_launch_term(self, launch_name: str, errored: bool):
+        print(f"interrupting {launch_name}")
+
+        if(self.subprocs[launch_name]):
+            self.subprocs[launch_name]["launch_subproc"].send_signal(signal.SIGINT)
+            self.subprocs[launch_name]["monitor_subproc"].send_signal(signal.SIGINT)
+
+        self.launches[launch_name]["running"] = False
+        self.subprocs[launch_name] = None
+        self.launches[launch_name]["error"] = errored
+
+    
+
+    def do_main(parent_self):
+        class MyServer(BaseHTTPRequestHandler):
+            def __init__(self, request, client_address, server) -> None:
+                super().__init__(request, client_address, server)
+
+            # can it!
+            def log_message(self, msg, * args, ** kwargs):
+                pass
+
+            def do_POST(self):
+                # this route allows spawning the launch
+                if self.path.split("?")[0] == "/start_launch":
+                    i = self.path.index ( "?" ) + 1
+                    params = dict ( [ tuple ( p.split("=") ) for p in self.path[i:].split ( "&" ) ] )
+
+                    launch_info = parent_self.launches[params["id"]]
+                    if(not launch_info["running"]):
+                        parent_self.handle_launch_spawn(launch_info["package"], launch_info["friendly_name"], launch_info["topics_data"])
+                        self.send_response(200)
+                    else:
+                        self.send_response(500)
+
+                    
+                    self.send_header("Content-type", "text/html")
+                    self.end_headers()
+
+                # this route allows stopping a launch
+                elif self.path.split("?")[0] == "/stop_launch":
+                    i = self.path.index ( "?" ) + 1
+                    params = dict ( [ tuple ( p.split("=") ) for p in self.path[i:].split ( "&" ) ] )
+
+                    launch_info = parent_self.launches[params["id"]]
+                    if(launch_info["running"]):
+                        launch_name = launch_info["package"] + launch_info["friendly_name"]
+                        parent_self.handle_launch_term(launch_name, False)  
+                        self.send_response(200)
+
+                    else:
+                        self.send_response(500)
+
+                    self.send_header("Content-type", "text/html")
+                    self.end_headers()                  
+
+
+            def do_GET(self):
+                # this route serves the page
+                if self.path == "/":
+                    self.send_response(200)
+                    self.send_header("Content-type", "text/html")
+                    self.end_headers()
+                    with open(PAGE_HTML_PATH, "rb") as f:
+                        self.wfile.write(f.read()) 
+
+                # this route allows the webserver to retrieve state
+                elif self.path == "/status":
+                    self.send_response(200)
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+
+                    # check on all the launch processes
+                    for name in list(parent_self.subprocs.keys()):
+                        if parent_self.subprocs[name]:
+                            launch_status = parent_self.subprocs[name]["launch_subproc"].poll()
+                            if launch_status is not None:
+                                # child has died T_T
+                                print(f"Launch {name} died")
+                                parent_self.handle_launch_term(name, True)
+
+                    self.wfile.write(json.dumps(list(parent_self.launches.values())).encode())   
+
+        webServer = HTTPServer((hostName, serverPort), MyServer)
+        print("Server started http://%s:%s" % (hostName, serverPort))
+        try:
+            webServer.serve_forever()
+        except KeyboardInterrupt:
+            pass
+
+        webServer.server_close()
+    
+    
 
 
 
@@ -174,12 +224,8 @@ def main():
 
     # last resort (no args) is webserver
     else:
-        webServer = HTTPServer((hostName, serverPort), MyServer)
-        print("Server started http://%s:%s" % (hostName, serverPort))
-
         pack_path = get_package_share_directory("remote_launch")
         launch_yaml = os.path.join(pack_path, "launches", "talos_launch.yaml")
-
 
         launch_map = {}
         with open(launch_yaml, 'r') as file:
@@ -189,21 +235,19 @@ def main():
                 launch_map[full_name] = {
                     "id": full_name,
                     "friendly_name": launch["file"],
+                    "package": launch["package"],
                     "error": False,
                     "running": False,
                     "topics_found": 0,
                     "topics_count": len(launch["topics"]) / 3,
-                    "topics_data": launch["topics"]
+                    "topics_data": launch["topics"],
                 }
 
-        print(launch_map)
+        # print(launch_map)
 
-        try:
-            webServer.serve_forever()
-        except KeyboardInterrupt:
-            pass
+        server = ParentServer(launch_map)
+        server.do_main()
 
-        webServer.server_close()
 
 
 if __name__ == '__main__':
