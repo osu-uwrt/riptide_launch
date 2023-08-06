@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Modern Website</title>
+
+    <style>
+        body {
+
+            font-family: Arial, sans-serif;
+
+            background-color: #f2f2f2;
+
+            margin: 0;
+
+            padding: 0;
+
+        }
+
+
+
+
+        header {
+
+            background-color: #333;
+
+            color: #fff;
+
+            text-align: center;
+
+            padding: 20px 0;
+
+        }
+
+
+
+
+        main {
+
+            padding: 20px;
+
+        }
+
+
+
+
+        table {
+
+            width: 100%;
+
+            border-collapse: collapse;
+
+            margin-top: 20px;
+
+        }
+
+
+
+
+        th,
+        td {
+
+            padding: 10px;
+
+            text-align: left;
+
+        }
+
+
+
+
+        th {
+
+            background-color: #555;
+
+            color: #fff;
+
+        }
+
+
+
+
+        tr:nth-child(even) {
+
+            background-color: #f2f2f2;
+
+        }
+
+
+
+
+        .progress-bar {
+
+            height: 20px;
+
+            width: 100%;
+
+            background-color: #ddd;
+
+            border: 1px solid #888;
+
+            border-radius: 5px;
+
+            overflow: hidden;
+
+            position: relative;
+
+        }
+
+
+
+
+        .progress {
+
+            height: 20px;
+
+            background-color: #4CAF50;
+
+            color: #fff;
+
+            text-align: center;
+
+            line-height: 20px;
+
+            position: absolute;
+
+            top: 0;
+
+            left: 0;
+
+            width: 0;
+
+        }
+
+
+
+
+        .progress-info {
+
+            position: absolute;
+
+            top: 0;
+
+            left: 0;
+
+            width: 100%;
+
+            height: 100%;
+
+            display: flex;
+
+            justify-content: center;
+
+            align-items: center;
+
+            color: #666;
+
+        }
+
+
+
+
+        .start-button {
+
+            background-color: #4CAF50;
+
+            color: #fff;
+
+            padding: 5px 10px;
+
+            border: none;
+
+            border-radius: 5px;
+
+            cursor: pointer;
+
+        }
+
+
+
+
+        .stop-button {
+
+            background-color: #FF4500;
+
+            color: #fff;
+
+            padding: 5px 10px;
+
+            border: none;
+
+            border-radius: 5px;
+
+            cursor: pointer;
+
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <main>
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Item</th>
+
+                    <th>Actions</th>
+
+                    <th>Progress</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="bringup_table">
+
+            </tbody>
+
+        </table>
+
+    </main>
+
+
+
+
+    <script>
+
+        var url_root = ""
+
+
+
+
+        function setProgress(launchId, numCompleted, numTotal) {
+
+            var progressElement = document.getElementById("launchentry-" + launchId + "-center");
+
+            var progressTitle = document.getElementById("launchentry-" + launchId + "-info");
+
+            progressElement.style.width = (numCompleted / numTotal) * 100 + '%';
+
+            progressTitle.textContent = numCompleted + '/' + numTotal + ' completed';
+
+        }
+
+        function setComplete(launchId) {
+
+            var progressElement = document.getElementById("launchentry-" + launchId + "-center");
+
+            var progressTitle = document.getElementById("launchentry-" + launchId + "-info");
+
+            progressElement.style.width = '100%';
+
+            progressTitle.textContent = 'Running';
+
+        }
+
+        function setError(launchId) {
+
+            var progressElement = document.getElementById("launchentry-" + launchId + "-center");
+
+            var progressTitle = document.getElementById("launchentry-" + launchId + "-info");
+
+            progressElement.style.width = '0%';
+
+            progressTitle.textContent = 'ERROR!';
+
+        }
+
+        function setOff(launchId) {
+
+            var progressElement = document.getElementById("launchentry-" + launchId + "-center");
+
+            var progressTitle = document.getElementById("launchentry-" + launchId + "-info");
+
+            progressElement.style.width = '0%';
+
+            progressTitle.textContent = '';
+
+        }
+
+        function addItem(launchId, friendlyName) {
+
+            var progressTable = document.getElementById("bringup_table");
+
+            var entryRoot = document.createElement("tr");
+
+            entryRoot.setAttribute("id", "launchentry-" + launchId);
+
+            var entryTitle = document.createElement("td");
+
+            entryTitle.innerText = friendlyName;
+
+            entryRoot.appendChild(entryTitle);
+
+
+
+            var entryButtons = document.createElement("td");
+
+            var startButton = document.createElement("button");
+
+            startButton.setAttribute("class", "start-button");
+
+            startButton.setAttribute("id", "launchentry-" + launchId + "-start");
+
+            startButton.innerText = "Start";
+
+            startButton.onclick = function () {
+
+                startClicked(launchId);
+
+            }
+
+            entryButtons.appendChild(startButton);
+
+            entryButtons.appendChild(document.createTextNode('\u00A0'));
+
+            var stopButton = document.createElement("button");
+
+            stopButton.setAttribute("class", "stop-button");
+
+            stopButton.setAttribute("id", "launchentry-" + launchId + "-end");
+
+            stopButton.innerText = "Stop";
+
+            stopButton.onclick = function () {
+
+                stopClicked(launchId);
+
+            }
+
+            entryButtons.appendChild(stopButton);
+
+            entryRoot.appendChild(entryButtons);
+
+
+
+            progressColumn = document.createElement("td");
+
+            progressBar = document.createElement("div");
+
+            progressBar.setAttribute("class", "progress-bar");
+
+            progressCenter = document.createElement("div");
+
+            progressCenter.setAttribute("class", "progress");
+
+            progressCenter.setAttribute("id", "launchentry-" + launchId + "-center");
+
+            progressBar.appendChild(progressCenter);
+
+            progressInfo = document.createElement("div");
+
+            progressInfo.setAttribute("class", "progress-info");
+
+            progressInfo.setAttribute("id", "launchentry-" + launchId + "-info");
+
+            progressBar.appendChild(progressInfo);
+
+            progressColumn.appendChild(progressBar);
+
+            entryRoot.appendChild(progressColumn);
+
+            progressTable.appendChild(entryRoot);
+
+        }
+
+
+        
+
+
+        function jsonCallback(data) {
+
+            // Example Format: [{"id": "mything", "friendly_name": "My Thing", "error": true, "running": true, "topics_found": 2, "topics_count": 8}, ...]
+
+            var id_list = []
+
+            var progressTable = document.getElementById("bringup_table");
+
+            var progressChildren = progressTable.children;
+
+            for (var i = 0; i < progressChildren.length; i++) {
+
+                if (progressChildren[i].id.length > 0) {
+
+                    id_list.push(progressChildren[i].id);
+
+                }
+
+            }
+
+
+
+
+            for (var i in data) {
+
+                entry = data[i];
+
+                var existingIdx = id_list.indexOf("launchentry-" + entry["id"]);
+
+                if (existingIdx < 0) {
+
+                    addItem(entry["id"], entry["friendly_name"]);
+
+                } else {
+
+                    id_list.splice(existingIdx, 1);
+
+                }
+
+
+
+
+                if (entry["error"]) {
+
+                    setError(entry["id"]);
+
+                }
+
+                else if (entry["running"]) {
+
+                    if (entry["topics_found"] === entry["topics_count"]) {
+
+                        setComplete(entry["id"]);
+
+                    }
+
+                    else {
+
+                        setProgress(entry["id"], entry["topics_found"], entry["topics_count"])
+
+                    }
+
+                }
+
+                else {
+
+                    setOff(entry["id"]);
+
+                }
+
+            }
+
+
+
+
+            for (var i = 0; i < id_list.length; i++) {
+
+                document.getElementById(id_list[i]).remove()
+
+            }
+
+        }
+
+
+
+
+
+
+        function startClicked(launchId) {
+
+            fetch(url_root + "/start_launch?id=" + launchId, { method: "POST" }).catch(error => alert("Error issuing start:\n"+error));
+
+        }
+
+        function stopClicked(launchId) {
+
+            fetch(url_root + "/stop_launch?id=" + launchId, { method: "POST" }).catch(error => alert("Error issuing stop:\n"+error));
+
+        }
+
+        var failureCount = 0;
+        var intervalId = setInterval(function () {
+            
+            fetch(url_root + "/status", { method: "GET" }).then(response => response.json().then(json => {
+                jsonCallback(json);
+                failureCount = 0;
+            })).catch(error => {
+                failureCount += 1;
+                if (failureCount > 3) {
+                    document.getElementById('bringup_table').innerHTML = "<header id='conn_lost_header'>Connection Lost</header>";
+                }
+            });
+
+        }, 1000);
+
+    </script>
+
+</body>
+
+</html>
