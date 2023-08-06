@@ -1,6 +1,6 @@
 # Python 3 server example
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import time, os, sys, subprocess, json, yaml, signal
+import time, os, sys, subprocess, json, yaml, signal, fcntl
 from typing import List
 
 from ros2launch.api import launch_a_launch_file
@@ -34,17 +34,20 @@ class ParentServer:
 
         popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_MONITOR_FLAG]
         popen_args.extend(topics)
-        monitor_subproc = subprocess.Popen(popen_args)
+        monitor_subproc = subprocess.Popen(popen_args, stdout=subprocess.PIPE)
+        flags = fcntl.fcntl(monitor_subproc.stdout.fileno(), fcntl.F_GETFL)
+        fcntl.fcntl(monitor_subproc.stdout.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
         dict_name = launch_pkg+launch_file
         self.subprocs[dict_name] = {"launch_subproc": launch_subproc, "monitor_subproc": monitor_subproc}
         self.launches[dict_name]["running"] = True
         self.launches[dict_name]["error"] = False
+        self.subprocs[dict_name]["topics_reporting"] = set()
 
 
 
     def handle_launch_term(self, launch_name: str, errored: bool):
-        print(f"interrupting {launch_name}")
+        print(f"Interrupting {launch_name}")
 
         if(self.subprocs[launch_name]):
             self.subprocs[launch_name]["launch_subproc"].send_signal(signal.SIGINT)
@@ -53,6 +56,9 @@ class ParentServer:
         self.launches[launch_name]["running"] = False
         self.subprocs[launch_name] = None
         self.launches[launch_name]["error"] = errored
+
+    def is_starting(self, launch_name: str):
+        return self.launches[launch_name]["running"] and len(self.subprocs[launch_name]["topics_reporting"]) < self.launches[launch_name]["topics_count"]
 
     
 
@@ -118,12 +124,26 @@ class ParentServer:
 
                     # check on all the launch processes
                     for name in list(parent_self.subprocs.keys()):
+                        # check if this is running
                         if parent_self.subprocs[name]:
+
+                            # check if we died
                             launch_status = parent_self.subprocs[name]["launch_subproc"].poll()
                             if launch_status is not None:
                                 # child has died T_T
                                 print(f"Launch {name} died")
                                 parent_self.handle_launch_term(name, True)
+
+                            elif parent_self.is_starting(name):
+                                # check for starting
+                                monitor_out = parent_self.subprocs[name]["monitor_subproc"].stdout.read(1)
+                                while monitor_out is not None:
+                                        parent_self.subprocs[name]["topics_reporting"].add(monitor_out[0])
+                                        monitor_out = parent_self.subprocs[name]["monitor_subproc"].stdout.read(1)
+
+
+                            parent_self.launches[name]["topics_found"] = len(parent_self.subprocs[name]["topics_reporting"])
+
 
                     self.wfile.write(json.dumps(list(parent_self.launches.values())).encode())   
 
@@ -144,9 +164,14 @@ class ParentServer:
 class ChildMonitorCallback:
         def __init__(self, index: int) -> None:
             self.index = index
+            self.has_called = False
 
         def callback(self, msg):
-            print(self.index)
+            if(not self.has_called):
+                sys.stdout.buffer.write(bytearray([self.index]))
+                sys.stdout.buffer.flush()
+                self.has_called = True
+
 
 class ChildMonitor(Node):
     def __init__(self, node_name: str, *, context: Context = None, cli_args: List[str] = None, namespace: str = None, use_global_arguments: bool = True, enable_rosout: bool = True, start_parameter_services: bool = True, parameter_overrides: List[Parameter] = None, allow_undeclared_parameters: bool = False, automatically_declare_parameters_from_overrides: bool = False) -> None:
@@ -242,8 +267,6 @@ def main():
                     "topics_count": len(launch["topics"]) / 3,
                     "topics_data": launch["topics"],
                 }
-
-        # print(launch_map)
 
         server = ParentServer(launch_map)
         server.do_main()
