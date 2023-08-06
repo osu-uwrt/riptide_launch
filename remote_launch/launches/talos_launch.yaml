@@ -25,4 +25,13 @@ launches: [
       "/tf", "tf2_msgs/msg/TFMessage", "0",
     ]
   },
+  {
+    package: "riptide_controllers2",
+    file: "solver.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [
+    ]
+  },
 ]
