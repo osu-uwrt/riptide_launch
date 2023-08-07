@@ -1,7 +1,8 @@
 # Python 3 server example
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import time, os, sys, subprocess, json, yaml, signal, fcntl
+import os, sys, subprocess, json, yaml, signal, fcntl
 from typing import List
+from glob import glob
 
 from ros2launch.api import launch_a_launch_file
 from ament_index_python.packages import get_package_share_directory
@@ -22,9 +23,28 @@ serverPort = 8080
 PAGE_HTML_PATH = os.path.join(get_package_share_directory("remote_launch"), "pages", "page.html")
 
 class ParentServer:
-    def __init__(self, launches) -> None:
-        self.launches = launches
+    def __init__(self) -> None:
+        self.launches = {}
         self.subprocs = {}
+
+    def load_file(self, file_path: str):
+        self.launches = {}
+        with open(file_path, 'r') as file:
+            launch_data = yaml.safe_load(file)["launches"]
+            for launch in launch_data:
+                full_name = launch["package"]+launch["file"]
+                self.launches[full_name] = {
+                    "id": full_name,
+                    "friendly_name": launch["file"],
+                    "package": launch["package"],
+                    "error": False,
+                    "running": False,
+                    "topics_found": 0,
+                    "topics_count": len(launch["topics"]) / 3,
+                    "topics_data": launch["topics"],
+                    "args": launch["args"]
+                }
+
     
     def handle_launch_spawn(self, launch_pkg: str, launch_file: str, topics: List[str]):
         dict_name = launch_pkg+launch_file
@@ -35,6 +55,7 @@ class ParentServer:
         popen_args.extend(self.launches[dict_name]["args"])
         launch_subproc = subprocess.Popen(popen_args)
 
+        # pipe stdout to this process with noblock
         popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_MONITOR_FLAG]
         popen_args.extend(topics)
         monitor_subproc = subprocess.Popen(popen_args, stdout=subprocess.PIPE)
@@ -108,12 +129,34 @@ class ParentServer:
                     self.send_header("Content-type", "text/html")
                     self.end_headers()  
 
+                # this route allows stopping a launch
+                elif self.path.split("?")[0] == "/load_launch":
+                    pack_path = get_package_share_directory("remote_launch")
+                    launch_yaml = os.path.join(pack_path, "launches", params["name"])
+
+                    print(f"Loading launch definition {launch_yaml}")
+
+                    if(os.path.isfile(launch_yaml)):
+                        parent_self.load_file(launch_yaml)
+                        self.send_response(200)
+
+                    else:
+                        self.send_response(500)
+
+                    self.send_header("Content-type", "text/html")
+                    self.end_headers() 
+
                 elif self.path.split("?")[0] == "/restart":
                     self.send_response(200)
                     self.send_header("Content-type", "text/html")
                     self.end_headers()   
 
                     subprocess.Popen(["sudo", "reboot", "now"])
+
+                else:
+                    self.send_response(404)
+                    self.send_header("Content-type", "text/html")
+                    self.end_headers()
 
 
 
@@ -127,7 +170,7 @@ class ParentServer:
                         self.wfile.write(f.read()) 
 
                 # this route allows the webserver to retrieve state
-                elif self.path == "/status":
+                elif self.path.split("?")[0] == "/status":
                     self.send_response(200)
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.send_header("Content-type", "application/json")
@@ -156,7 +199,21 @@ class ParentServer:
                             parent_self.launches[name]["topics_found"] = len(parent_self.subprocs[name]["topics_reporting"])
 
 
-                    self.wfile.write(json.dumps(list(parent_self.launches.values())).encode())   
+                    self.wfile.write(json.dumps(list(parent_self.launches.values())).encode()) 
+
+                # retrives availiable files
+                elif self.path.split("?")[0] == "/files":
+                    pack_path = get_package_share_directory("remote_launch")
+                    launch_dir = os.path.join(pack_path, "launches", "*.yaml")
+                    files = glob(launch_dir)
+
+                    self.wfile.write(json.dumps({"files": files}).encode())
+
+                else:
+                    self.send_response(404)
+                    self.send_header("Content-type", "text/html")
+                    self.end_headers()
+
 
         webServer = HTTPServer((hostName, serverPort), MyServer)
         print("Server started http://%s:%s" % (hostName, serverPort))
@@ -262,27 +319,10 @@ def main():
 
     # last resort (no args) is webserver
     else:
+        server = ParentServer()
         pack_path = get_package_share_directory("remote_launch")
-        launch_yaml = os.path.join(pack_path, "launches", "talos_launch.yaml")
-
-        launch_map = {}
-        with open(launch_yaml, 'r') as file:
-            launch_data = yaml.safe_load(file)["launches"]
-            for launch in launch_data:
-                full_name = launch["package"]+launch["file"]
-                launch_map[full_name] = {
-                    "id": full_name,
-                    "friendly_name": launch["file"],
-                    "package": launch["package"],
-                    "error": False,
-                    "running": False,
-                    "topics_found": 0,
-                    "topics_count": len(launch["topics"]) / 3,
-                    "topics_data": launch["topics"],
-                    "args": launch["args"]
-                }
-
-        server = ParentServer(launch_map)
+        launch_file = os.path.join(pack_path, "launches", "talos_launch.yaml")
+        server.load_file(launch_file)
         server.do_main()
 
 
