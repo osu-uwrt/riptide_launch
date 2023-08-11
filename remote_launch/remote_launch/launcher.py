@@ -212,10 +212,20 @@ class ParentServer:
                     launch_dir = os.path.join(pack_path, "launches", "*.yaml")
                     files = glob(launch_dir)
 
+                    self.send_response(200)
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+
                     self.wfile.write(json.dumps({"files": files}).encode())
 
                 # retrives availiable files
                 elif self.path.split("?")[0] == "/launch":
+                    self.send_response(200)
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+
                     self.wfile.write(json.dumps({"file": parent_self.current_file}).encode())
 
                 else:
