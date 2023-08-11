@@ -26,9 +26,11 @@ class ParentServer:
     def __init__(self) -> None:
         self.launches = {}
         self.subprocs = {}
+        self.current_file = ""
 
     def load_file(self, file_path: str):
         self.launches = {}
+        self.current_file = file_path
         with open(file_path, 'r') as file:
             launch_data = yaml.safe_load(file)["launches"]
             for launch in launch_data:
@@ -131,8 +133,11 @@ class ParentServer:
 
                 # this route allows stopping a launch
                 elif self.path.split("?")[0] == "/load_launch":
+                    i = self.path.index ( "?" ) + 1
+                    params = dict ( [ tuple ( p.split("=") ) for p in self.path[i:].split ( "&" ) ] )
+
                     pack_path = get_package_share_directory("remote_launch")
-                    launch_yaml = os.path.join(pack_path, "launches", params["name"])
+                    launch_yaml = os.path.join(pack_path, "launches", params["id"])
 
                     print(f"Loading launch definition {launch_yaml}")
 
@@ -202,17 +207,23 @@ class ParentServer:
                     self.wfile.write(json.dumps(list(parent_self.launches.values())).encode()) 
 
                 # retrives availiable files
-                elif self.path.split("?")[0] == "/files":
+                elif self.path.split("?")[0] == "/launches":
                     pack_path = get_package_share_directory("remote_launch")
                     launch_dir = os.path.join(pack_path, "launches", "*.yaml")
                     files = glob(launch_dir)
 
                     self.wfile.write(json.dumps({"files": files}).encode())
 
+                # retrives availiable files
+                elif self.path.split("?")[0] == "/launch":
+                    self.wfile.write(json.dumps({"file": parent_self.current_file}).encode())
+
                 else:
                     self.send_response(404)
                     self.send_header("Content-type", "text/html")
                     self.end_headers()
+
+
 
 
         webServer = HTTPServer((hostName, serverPort), MyServer)
@@ -321,8 +332,6 @@ def main():
     else:
         server = ParentServer()
         pack_path = get_package_share_directory("remote_launch")
-        launch_file = os.path.join(pack_path, "launches", "talos_launch.yaml")
-        server.load_file(launch_file)
         server.do_main()
 
 

@@ -1,0 +1,55 @@
+launches: [
+  {
+    package: "riptide_hardware2",
+    file: "hardware.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [
+      "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
+      "/talos/dvl/status", "nortek_dvl_msgs/msg/DvlStatus", "0",
+      "/talos/vectornav/imu", "sensor_msgs/msg/Imu", "0",
+      "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
+    ]
+  },
+  {
+    package: "riptide_hardware2",
+    file: "navigation.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [
+      "/talos/joint_states", "sensor_msgs/msg/JointState", "0",
+      "/talos/odometry/filtered", "nav_msgs/msg/Odometry", "0",
+      "/talos/depth/pose", "geometry_msgs/msg/PoseWithCovarianceStamped", "0",
+      "/tf", "tf2_msgs/msg/TFMessage", "0",
+    ]
+  },
+  {
+    package: "riptide_controllers2",
+    file: "solver.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [
+    ]
+  },
+  {
+    package: "riptide_controllers2",
+    file: "controller.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [
+      "/talos/controller/state"
+    ]
+  },
+  {
+    package: "riptide_mapping2",
+    file: mapping.launch.py,
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
+  },
+]
