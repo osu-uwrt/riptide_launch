@@ -27,21 +27,14 @@ launches: [
   },
   {
     package: "riptide_controllers2",
-    file: "solver.launch.py",
+    file: "control_system.launch.py",
     args: [
       "robot:=talos"
     ],
     topics: [
-    ]
-  },
-  {
-    package: "riptide_controllers2",
-    file: "controller.launch.py",
-    args: [
-      "robot:=talos"
-    ],
-    topics: [
-      "/talos/controller/state"
+      "/talos/reqRPM", "std_msgs/msg/Int32MultiArray", "0",
+      "/talos/controller/FF_body_force", "geometry_msgs/msg/Twist", "0",
+      "/talos/reqforce", std_msgs/msg/Int32MultiArray, "0",
     ]
   },
   {
