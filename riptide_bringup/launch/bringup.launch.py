@@ -7,7 +7,7 @@ from launch.substitutions import LaunchConfiguration as LC
 import os
 
 DEFAULT_ROBOT_NAME = "talos"
-DEFAULT_ACTIVE_CONTROL_MODEL = "PID"
+DEFAULT_ACTIVE_CONTROL_MODEL = "hybrid"
 
 
 def determine_launch_files(context, *args, **kwargs):

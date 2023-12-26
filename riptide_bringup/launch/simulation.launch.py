@@ -6,7 +6,7 @@ from launch.launch_description_sources import AnyLaunchDescriptionSource
 from ament_index_python import get_package_share_directory
 
 DEFAULT_ROBOT_NAME = "tempest"
-DEFAULT_ACTIVE_CONTROL_MODEL = "PID"
+DEFAULT_ACTIVE_CONTROL_MODEL = "hybrid"
 
 def generate_launch_description():
     return LaunchDescription([
