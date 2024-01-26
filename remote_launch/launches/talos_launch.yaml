@@ -30,7 +30,7 @@ launches: [
     file: "control_system.launch.py",
     args: [
       "robot:=talos",
-      "active_control_model:=PID"
+      "active_control_model:=hybrid"
     ],
     topics: [
       "/talos/reqRPM", "std_msgs/msg/Int32MultiArray", "0",
