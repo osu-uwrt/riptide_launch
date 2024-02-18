@@ -1,74 +1,78 @@
-from distutils.command.config import config
-from signal import pause
-from time import sleep
-from click import launch
-
-from scipy import rand
-from launch_ros.actions import Node
-from launch.launch_description_sources import AnyLaunchDescriptionSource
-from launch.actions import IncludeLaunchDescription
-from ament_index_python.packages import get_package_share_directory
-from launch.launch_description import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction
-from launch_ros.actions import PushRosNamespace
-from launch.substitutions import LaunchConfiguration as LC
-from riptide_SNIB import simulinkControl, gazeboControl
 import os
+from launch.launch_description import LaunchDescription
+from launch.substitutions import LaunchConfiguration as LC
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import AnyLaunchDescriptionSource
+from ament_index_python import get_package_share_directory
 
-default_robot_name = "tempest"
-
-# all of the robot namespaced launch files to start
-ns_launch_files = [
-    os.path.join(
-        get_package_share_directory('riptide_controllers2'),
-        'launch',
-        'controller.launch.py'),
-    os.path.join(
-        get_package_share_directory('riptide_mapping2'),
-        'launch',
-        'mapping.launch.py'),
-    os.path.join(
-        get_package_share_directory('riptide_SNIB'),
-        "launch",
-        "snib.launch.py"
-    ),
-    os.path.join(
-        get_package_share_directory('riptide_hardware2'),
-        'launch',
-        'navigation.launch.py'
-    ),
-    os.path.join(
-        get_package_share_directory('uwrt_ros_gz'),
-        "launch",
-        "uwrt_ros_gz.launch.py"
-    ),
-]
-
-simulinkControl.launchSimulink(True)
-gazeboControl.launchGazebo()
+DEFAULT_ROBOT_NAME = "tempest"
+DEFAULT_ACTIVE_CONTROL_MODEL = "hybrid"
 
 def generate_launch_description():
-    # read the parameter for robot name
-    robot_name = LC('robot')
-
-    # setup a list to collect launch descriptions
-    ns_descrips = []
-
-    # iterate the list of launch files we were given to start
-    for launch_file in ns_launch_files:
-        ns_descrips.append(
-            IncludeLaunchDescription(
-                AnyLaunchDescriptionSource(launch_file),
-                launch_arguments=[
-                    ('namespace', robot_name),
-                    ('robot', robot_name),
-                ]
-            )
-        )
-
-    # create the launch description 
     return LaunchDescription([
-        DeclareLaunchArgument('robot', default_value=default_robot_name, description='name of the robot to spawn'),
-
-        GroupAction(ns_descrips),
+        DeclareLaunchArgument(
+            'robot',
+            default_value=DEFAULT_ROBOT_NAME,
+            description="Name of the robot to use."
+        ),
+        
+        DeclareLaunchArgument(
+            'active_control_model',
+            default_value=DEFAULT_ACTIVE_CONTROL_MODEL,
+            description="Name of the active control model to use."
+        ),
+        
+        DeclareLaunchArgument(
+            'active_control_enabled',
+            default_value="True",
+            description="Whether or not the active control should be launched with the system."
+        ),
+        
+        # launch regular bringup processes
+        IncludeLaunchDescription(
+            AnyLaunchDescriptionSource(
+                os.path.join(
+                    get_package_share_directory('riptide_bringup2'),
+                    'launch',
+                    'bringup.launch.py'
+                )
+            ),
+            
+            launch_arguments=[
+                ('hardware', 'none'),
+                ('robot', LC('robot')),
+                ('active_control_enabled', LC('active_control_enabled')),
+                ('active_control_model', LC('active_control_model'))
+            ]
+        ),
+        
+        #launch simulator 
+        IncludeLaunchDescription(
+            AnyLaunchDescriptionSource(
+                os.path.join(
+                    get_package_share_directory('c_simulator'),
+                    'launch',
+                    'simulator.launch.py'
+                )
+            ),
+            
+            launch_arguments=[
+                ('robot', LC('robot'))
+            ]
+        ),
+        
+        #launch RViz
+        IncludeLaunchDescription(
+            AnyLaunchDescriptionSource(
+                os.path.join(
+                    get_package_share_directory('riptide_rviz'),
+                    'launch',
+                    'rviz_start.launch.py'
+                )
+            ),
+            
+            launch_arguments=[
+                ('robot', LC('robot'))
+            ]
+        )
     ])

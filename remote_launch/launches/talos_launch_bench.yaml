@@ -1,7 +1,7 @@
 launches: [
   {
     package: "riptide_hardware2",
-    file: "hardware.launch.py",
+    file: "hardware_fake_dvl.launch.py",
     args: [
       "robot:=talos"
     ],

@@ -1,13 +1,12 @@
 launches: [
   {
-    package: "riptide_hardware2",
-    file: "hardware.launch.py",
+    package: "c_simulator",
+    file: "simulator.launch.py",
     args: [
       "robot:=talos"
     ],
     topics: [
-      "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
-      "/talos/dvl/status", "nortek_dvl_msgs/msg/DvlStatus", "0",
+      "/talos/dvl_twist", "geometry_msgs/msg/TwistWithCovarianceStamped", "0",
       "/talos/vectornav/imu", "sensor_msgs/msg/Imu", "0",
       "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
     ]
