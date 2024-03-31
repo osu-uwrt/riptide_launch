@@ -34,7 +34,7 @@ launches: [
     ],
     topics: [
       "/talos/thruster_forces", "std_msgs/msg/Float32MultiArray", "0",
-      "/talos/controller/reqRPM", "std_msgs/msg/Int32MultiArray", "0",
+      "/talos/command/requested_rpm", "std_msgs/msg/Int32MultiArray", "0",
       "/talos/controller/FF_body_force", "geometry_msgs/msg/Twist", "0",
     ]
   },
