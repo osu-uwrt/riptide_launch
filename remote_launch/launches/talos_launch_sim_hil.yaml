@@ -32,9 +32,9 @@ launches: [
       "active_control_model:=hybrid"
     ],
     topics: [
-      "/talos/reqRPM", "std_msgs/msg/Int32MultiArray", "0",
+      "/talos/thruster_forces", "std_msgs/msg/Float32MultiArray", "0",
+      "/talos/command/requested_rpm", "riptide_msgs2/msg/DshotCommand", "0",
       "/talos/controller/FF_body_force", "geometry_msgs/msg/Twist", "0",
-      "/talos/reqforce", std_msgs/msg/Int32MultiArray, "0",
     ]
   },
   {
