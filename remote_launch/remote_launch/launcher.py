@@ -271,9 +271,11 @@ class ChildMonitor(Node):
         for i in range(len(topics)):
             topic_name = topics[i][0]
             topic_type = str(topics[i][1]).split("/")
-            topic_qos = "qos_profile_system_default" if topics[i][2] == 0 else "qos_profile_sensor_data"
+            topic_qos = "qos_profile_system_default" if int(topics[i][2]) == 0 else "qos_profile_sensor_data" if int(topics[i][2]) == 1 else None
+            if topic_qos is None:
+                raise RuntimeError("Invalid QOS: Must be 1 for sensor data, 0 for system default")
 
-            print(f"Monitoring {topics[i][0]} of type {topics[i][1]} with QOS {topics[i][2]}")
+            print(f"Monitoring {topics[i][0]} of type {topics[i][1]} with QOS {topic_qos}", file=sys.stderr)
 
             # make the subscription
             sub_cb = ChildMonitorCallback(i)
