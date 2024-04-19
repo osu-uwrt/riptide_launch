@@ -440,11 +440,18 @@
           });
       };
 
+      var disconnected = false;
       var failureCount = 0;
       var intervalId = setInterval(function () {
         fetch(url_root + "/status", { method: "GET" })
           .then((response) =>
             response.json().then((json) => {
+              var selector = document.getElementById("launches")
+              if (disconnected && selector.selectedIndex >= 0) {
+                launch_sel = selector.options[selector.selectedIndex].value;
+                launchSelected(launch_sel)
+                disconnected = false;
+              }
               statusCallback(json);
               failureCount = 0;
             })
@@ -452,6 +459,7 @@
           .catch((error) => {
             failureCount += 1;
             if (failureCount > 3) {
+              disconnected = true;
               document.getElementById("bringup_table").innerHTML =
                 "<header id='conn_lost_header'>Connection Lost</header>";
             }
