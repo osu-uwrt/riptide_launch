@@ -1,17 +1,5 @@
 launches: [
   {
-    package: "c_simulator",
-    file: "simulator.launch.py",
-    args: [
-      "robot:=talos"
-    ],
-    topics: [
-      "/talos/dvl_twist", "geometry_msgs/msg/TwistWithCovarianceStamped", "0",
-      "/talos/vectornav/imu", "sensor_msgs/msg/Imu", "0",
-      "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
-    ]
-  },
-  {
     package: "riptide_hardware2",
     file: "navigation.launch.py",
     args: [

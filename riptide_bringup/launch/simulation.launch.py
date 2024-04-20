@@ -52,22 +52,7 @@ def generate_launch_description():
                 os.path.join(
                     get_package_share_directory('c_simulator'),
                     'launch',
-                    'simulator.launch.py'
-                )
-            ),
-            
-            launch_arguments=[
-                ('robot', LC('robot'))
-            ]
-        ),
-        
-        #launch RViz
-        IncludeLaunchDescription(
-            AnyLaunchDescriptionSource(
-                os.path.join(
-                    get_package_share_directory('riptide_rviz'),
-                    'launch',
-                    'rviz_start.launch.py'
+                    'full_simulator.launch.py'
                 )
             ),
             
