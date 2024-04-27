@@ -4,13 +4,11 @@ import os, sys, subprocess, json, yaml, signal, fcntl
 from typing import List
 from glob import glob
 
-from ros2launch.api import launch_a_launch_file
 from ament_index_python.packages import get_package_share_directory
 
 import rclpy
 from rclpy.node import Node
-from rclpy.context import Context
-from rclpy.parameter import Parameter
+
 import uuid
 
 SUPER_SECRET_LAUNCH_FLAG = "--super-secret-forking-flag"
@@ -26,6 +24,7 @@ class ParentServer:
     def __init__(self) -> None:
         self.launches = {}
         self.subprocs = {}
+        self.zombies = []
         self.current_file = ""
 
     def load_file(self, file_path: str):
@@ -47,10 +46,10 @@ class ParentServer:
                     "args": launch["args"]
                 }
 
-    
+
     def handle_launch_spawn(self, launch_pkg: str, launch_file: str, topics: List[str]):
         dict_name = launch_pkg+launch_file
-        
+
         # launch fork
         popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_LAUNCH_FLAG]
         popen_args.extend([launch_pkg, launch_file])
@@ -64,7 +63,7 @@ class ParentServer:
         flags = fcntl.fcntl(monitor_subproc.stdout.fileno(), fcntl.F_GETFL)
         fcntl.fcntl(monitor_subproc.stdout.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-        
+
         self.subprocs[dict_name] = {"launch_subproc": launch_subproc, "monitor_subproc": monitor_subproc}
         self.launches[dict_name]["running"] = True
         self.launches[dict_name]["error"] = False
@@ -79,6 +78,9 @@ class ParentServer:
             self.subprocs[launch_name]["launch_subproc"].send_signal(signal.SIGINT)
             self.subprocs[launch_name]["monitor_subproc"].send_signal(signal.SIGINT)
 
+        self.zombies.append(self.subprocs[launch_name]["launch_subproc"])
+        self.zombies.append(self.subprocs[launch_name]["monitor_subproc"])
+
         self.launches[launch_name]["running"] = False
         self.subprocs[launch_name] = None
         self.launches[launch_name]["error"] = errored
@@ -86,7 +88,7 @@ class ParentServer:
     def is_starting(self, launch_name: str):
         return self.launches[launch_name]["running"] and len(self.subprocs[launch_name]["topics_reporting"]) < self.launches[launch_name]["topics_count"]
 
-    
+
 
     def do_main(parent_self):
         class MyServer(BaseHTTPRequestHandler):
@@ -110,7 +112,7 @@ class ParentServer:
                     else:
                         self.send_response(500)
 
-                    
+
                     self.send_header("Content-type", "text/html")
                     self.end_headers()
 
@@ -122,14 +124,14 @@ class ParentServer:
                     launch_info = parent_self.launches[params["id"]]
                     if(launch_info["running"]):
                         launch_name = launch_info["package"] + launch_info["friendly_name"]
-                        parent_self.handle_launch_term(launch_name, False)  
+                        parent_self.handle_launch_term(launch_name, False)
                         self.send_response(200)
 
                     else:
                         self.send_response(500)
 
                     self.send_header("Content-type", "text/html")
-                    self.end_headers()  
+                    self.end_headers()
 
                 # this route allows stopping a launch
                 elif self.path.split("?")[0] == "/load_launch":
@@ -149,12 +151,12 @@ class ParentServer:
                         self.send_response(500)
 
                     self.send_header("Content-type", "text/html")
-                    self.end_headers() 
+                    self.end_headers()
 
                 elif self.path.split("?")[0] == "/restart":
                     self.send_response(200)
                     self.send_header("Content-type", "text/html")
-                    self.end_headers()   
+                    self.end_headers()
 
                     subprocess.Popen(["sudo", "reboot", "now"])
 
@@ -172,7 +174,7 @@ class ParentServer:
                     self.send_header("Content-type", "text/html")
                     self.end_headers()
                     with open(PAGE_HTML_PATH, "rb") as f:
-                        self.wfile.write(f.read()) 
+                        self.wfile.write(f.read())
 
                 # this route allows the webserver to retrieve state
                 elif self.path.split("?")[0] == "/status":
@@ -203,8 +205,10 @@ class ParentServer:
 
                             parent_self.launches[name]["topics_found"] = len(parent_self.subprocs[name]["topics_reporting"])
 
+                    # Clean up any zombies
+                    parent_self.zombies[:] = [proc for proc in parent_self.zombies if proc.poll() is None]
 
-                    self.wfile.write(json.dumps(list(parent_self.launches.values())).encode()) 
+                    self.wfile.write(json.dumps(list(parent_self.launches.values())).encode())
 
                 # retrives availiable files
                 elif self.path.split("?")[0] == "/launches":
@@ -244,14 +248,15 @@ class ParentServer:
             pass
 
         webServer.server_close()
-    
-    
+
+
 
 
 
 # monitor process stuff
 class ChildMonitorCallback:
-        def __init__(self, index: int) -> None:
+        def __init__(self, parent, index: int) -> None:
+            self.parent = parent
             self.index = index
             self.has_called = False
 
@@ -260,14 +265,18 @@ class ChildMonitorCallback:
                 sys.stdout.buffer.write(bytearray([self.index]))
                 sys.stdout.buffer.flush()
                 self.has_called = True
+                self.parent.remaining_topics -= 1
+                if self.parent.remaining_topics < 1:
+                    exit(0)
 
 
 class ChildMonitor(Node):
-    def __init__(self, node_name: str, *, context: Context = None, cli_args: List[str] = None, namespace: str = None, use_global_arguments: bool = True, enable_rosout: bool = True, start_parameter_services: bool = True, parameter_overrides: List[Parameter] = None, allow_undeclared_parameters: bool = False, automatically_declare_parameters_from_overrides: bool = False) -> None:
+    def __init__(self, node_name: str, *, context = None, cli_args: List[str] = None, namespace: str = None, use_global_arguments: bool = True, enable_rosout: bool = True, start_parameter_services: bool = True, parameter_overrides = None, allow_undeclared_parameters: bool = False, automatically_declare_parameters_from_overrides: bool = False) -> None:
         super().__init__(node_name, context=context, cli_args=cli_args, namespace=namespace, use_global_arguments=use_global_arguments, enable_rosout=enable_rosout, start_parameter_services=start_parameter_services, parameter_overrides=parameter_overrides, allow_undeclared_parameters=allow_undeclared_parameters, automatically_declare_parameters_from_overrides=automatically_declare_parameters_from_overrides)
         self.monitor_subs = list()
 
     def start_monitors(self, topics: list):
+        self.remaining_topics = len(topics)
         for i in range(len(topics)):
             topic_name = topics[i][0]
             topic_type = str(topics[i][1]).split("/")
@@ -278,7 +287,7 @@ class ChildMonitor(Node):
             print(f"Monitoring {topics[i][0]} of type {topics[i][1]} with QOS {topic_qos}", file=sys.stderr)
 
             # make the subscription
-            sub_cb = ChildMonitorCallback(i)
+            sub_cb = ChildMonitorCallback(self, i)
 
             from rclpy.qos import qos_profile_sensor_data, qos_profile_system_default
 
@@ -295,6 +304,7 @@ def main():
 
     # Handle the launch startup
     if len(sys.argv) > 2 and sys.argv[1] == SUPER_SECRET_LAUNCH_FLAG:
+        from ros2launch.api import launch_a_launch_file
         arg_begin_idx = 3
 
         # resolve the package path
@@ -311,7 +321,7 @@ def main():
         args = sys.argv[arg_begin_idx :]
 
         print(f"args: {args}")
-        
+
         # launch the actual launch file with the CLI api
         launch_a_launch_file(
             launch_file_path=launch_file,
@@ -326,7 +336,7 @@ def main():
         if len(sys.argv[2:]) % 3 != 0 or len(sys.argv[2:]) == 0:
             print("Malformed launch args passed to monitor child!")
             return
-        
+
         # build the topic info to send to the monitor node
         topics = []
         for i in range(2, len(sys.argv), 3):
