@@ -41,7 +41,7 @@ launches: [
       "robot:=talos"
     ],
     topics: [
-      "/talos/controller/state"
+      "/talos/controller/state", "std_msgs/msg/Empty", "0",
     ]
   },
   {
