@@ -32,6 +32,7 @@
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
+      table-layout: fixed;
     }
 
     th,
@@ -60,6 +61,47 @@
 
     tr:nth-child(even) {
       background-color: #f2f2f2;
+    }
+
+    .expand-info-btn {
+      font-weight: bold;
+      font-size: 1.2em;
+      padding-right: 0.25em;
+      cursor: pointer;
+      user-select: none;
+      display: inline-block;
+      width: 0.75em;
+    }
+
+    .launchdetails-contents {
+      padding: 0.75em;
+      background-color: #ccc;
+    }
+
+    h4.launchdetails-info {
+      margin-top: 0;
+      margin-bottom: 0;
+      padding-left: 0.5em;
+      padding-right: 0.5em;
+      padding-top: 0.5em;
+    }
+    ul.launchdetails-info {
+      margin-top: 0;
+      margin-bottom: 0;
+      padding-top: 0.5em;
+      padding-bottom: 0.5em;
+      padding-right: 0.5em;
+    }
+
+    .launchdetails-topic-name {
+      font-family: monospace;
+    }
+    .launchdetails-topic-seen {
+      color: green;
+    }
+    .launchdetails-topic-unseen {
+      color: red;
+      font-weight: bold;
     }
 
     .progress-bar {
@@ -141,6 +183,17 @@
       margin-top: 0;
       padding-top: 0.5em;
       padding-bottom: 0.5em;
+      padding-right: 0.5em;
+    }
+    .zombie-procinfo {
+      font-family: monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      list-style-position: inside;
+    }
+    .zombie-procinfo-pid {
+      font-weight: bold;
     }
   </style>
 </head>
@@ -163,8 +216,9 @@
     <table>
       <tr>
         <th>
-          <button onclick="if(confirm('Confirm computer reboot')) {restartClicked(); alert('Rebooting!');}">
-            Restart Computer
+          <button id="restartServiceBtn" style="display: none"
+            onclick="if(confirm('Close all running RVIZ/ros monitoring tools before pressing OK...')) {restartServiceClicked();}">
+            Restart Service
           </button>
         </th>
         <th>
@@ -178,8 +232,9 @@
 
   <script>
     var url_root = "";
+    var disconnected = false;
 
-    function refreshState(launchData) {
+    function refreshState(launchData, systemdMode) {
       var launchId = launchData.id;
       var topicData = launchData.monitored_topics;
 
@@ -238,6 +293,64 @@
         startBtn.removeAttribute("disabled");
         stopBtn.setAttribute("disabled", "true");
       }
+
+      var detailsElement = document.getElementById("launchdetails-" + launchId + "-contents");
+      detailsElement.innerHTML = "";
+
+      if (systemdMode && (launchData.launch_procinfo !== null || launchData.monitor_procinfo !== null)) {
+        var processHdr = document.createElement("h4");
+        processHdr.innerText = "Running Processes";
+        processHdr.setAttribute("class", "launchdetails-info");
+        detailsElement.appendChild(processHdr);
+
+        var processList = document.createElement("ul");
+        processList.setAttribute("class", "launchdetails-info");
+        if (launchData.launch_procinfo !== null) {
+          addZombieProcinfo(launchData.launch_procinfo, processList);
+        }
+        if (launchData.monitor_procinfo !== null) {
+          addZombieProcinfo(launchData.monitor_procinfo, processList);
+        }
+        detailsElement.appendChild(processList);
+      }
+
+      var topicsHdr = document.createElement("h4");
+      topicsHdr.innerText = "Monitored Topics";
+      topicsHdr.setAttribute("class", "launchdetails-info");
+      detailsElement.appendChild(topicsHdr);
+
+      var topicsList = document.createElement("ul");
+      topicsList.setAttribute("class", "launchdetails-info");
+      if (topicData.length === 0) {
+        var topicItem = document.createElement("li");
+        topicItem.innerText = "None";
+        topicsList.appendChild(topicItem);
+      }
+      else {
+        for (var i = 0; i < topicData.length; i++) {
+          var topicEntry = document.createElement("li");
+          var topicName = document.createElement("span");
+          topicName.setAttribute("class", "launchdetails-topic-name");
+          topicName.innerText = topicData[i].name;
+          topicEntry.appendChild(topicName);
+
+          if (launchData.state !== "stopped" && launchData.state !== "error") {
+            var topicSeen = document.createElement("span");
+            if (topicData[i].seen) {
+              topicSeen.setAttribute("class", "launchdetails-topic-seen");
+              topicSeen.innerText = " [Present]";
+            }
+            else {
+              topicSeen.setAttribute("class", "launchdetails-topic-unseen");
+              topicSeen.innerText = " [Not Present]";
+            }
+            topicEntry.appendChild(topicSeen);
+          }
+
+          topicsList.appendChild(topicEntry);
+        }
+      }
+      detailsElement.appendChild(topicsList);
     }
 
     function changeLaunch() {
@@ -247,16 +360,38 @@
       launchSelected(launch_sel);
     }
 
+    function toggleDetailsVisibility(launchId) {
+      var detailsRoot = document.getElementById("launchdetails-" + launchId);
+      var btnElement = document.getElementById("launchentry-" + launchId + "-details-btn");
+      if (detailsRoot.style.display === "none") {
+        detailsRoot.style.display = "revert";
+        btnElement.innerText = "-";
+      }
+      else {
+        detailsRoot.style.display = "none";
+        btnElement.innerText = "+";
+      }
+    }
+
     function addItem(launchId, friendlyName) {
       var progressTable = document.getElementById("bringup_table");
 
       var entryRoot = document.createElement("tr");
       entryRoot.setAttribute("id", "launchentry-" + launchId);
 
-      var entryTitle = document.createElement("td");
+      var entryTitleCell = document.createElement("td");
+      var expandInfoBtn = document.createElement("span");
+      expandInfoBtn.setAttribute("id", "launchentry-" + launchId + "-details-btn");
+      expandInfoBtn.setAttribute("class", "expand-info-btn");
+      expandInfoBtn.onclick = function () {toggleDetailsVisibility(launchId)};
+      expandInfoBtn.innerText = "+";
+
+      entryTitleCell.appendChild(expandInfoBtn);
+      var entryTitle = document.createElement("span");
       entryTitle.setAttribute("class", "title-box");
       entryTitle.innerText = friendlyName;
-      entryRoot.appendChild(entryTitle);
+      entryTitleCell.appendChild(entryTitle);
+      entryRoot.appendChild(entryTitleCell);
 
       var entryButtons = document.createElement("td");
       entryButtons.setAttribute("class", "button-box");
@@ -305,12 +440,53 @@
 
       entryRoot.appendChild(progressColumn);
 
+      var detailsRoot = document.createElement("tr");
+      detailsRoot.setAttribute("id", "launchdetails-" + launchId);
+      detailsRoot.style.display = "none";
+      var detailsContents = document.createElement("td");
+      detailsContents.setAttribute("id", "launchdetails-" + launchId + "-contents");
+      detailsContents.setAttribute("colspan", "3");
+      detailsContents.setAttribute("class", "launchdetails-contents");
+      detailsRoot.appendChild(detailsContents);
+
       progressTable.appendChild(entryRoot);
+      progressTable.appendChild(detailsRoot);
     }
 
-    function addZombies(launchDataArray) {
+    function addZombieProcinfo(procInfo, listElement) {
+      // Create child process info
+      var listItem = document.createElement("li");
+      listItem.setAttribute("class", "zombie-procinfo");
+      listItem.setAttribute("title", procInfo.full_name);
+
+      // Create PID
+      var pidSpan = document.createElement("span");
+      pidSpan.innerText = "PID " + procInfo.pid.toString() + " [" + procInfo.state + "]: ";
+      pidSpan.setAttribute("class", "zombie-procinfo-pid");
+      listItem.appendChild(pidSpan);
+
+      // Create cmdline
+      var cmdlineSpan = document.createElement("span");
+      cmdlineSpan.setAttribute("class", "zombie-procinfo-cmdline");
+      cmdlineSpan.innerText = procInfo.full_name;
+      listItem.appendChild(cmdlineSpan);
+      listElement.appendChild(listItem);
+
+      if (procInfo.children.length > 0) {
+        var childListElement = document.createElement("ul");
+        listElement.appendChild(childListElement);
+        for (var i = 0; i < procInfo.children.length; i++) {
+          addZombieProcinfo(procInfo.children[i], childListElement);
+        }
+      }
+    }
+
+    function addZombies(statusJson) {
       var zombieContainer = document.getElementById("zombies");
       zombieContainer.innerHTML = '';
+
+      var launchDataArray = statusJson["launches"];
+      var orphanArray = statusJson["orphans"];
 
       var listElement = null;
       for (var i = 0; i < launchDataArray.length; i++) {
@@ -321,7 +497,7 @@
 
         if (listElement === null) {
           var header = document.createElement("h3");
-          header.innerText = "Zombies:";
+          header.innerText = "Abandoned Launches:";
           header.setAttribute("class", "zombie-list");
           zombieContainer.appendChild(header);
 
@@ -333,10 +509,36 @@
         var listItem = document.createElement("li");
         listItem.innerText = launchEntry.friendly_name + " (" + launchEntry.state + ")";
         listElement.appendChild(listItem);
+
+        if (launchEntry.launch_procinfo !== null || launchEntry.monitor_procinfo !== null) {
+          var childListElement = document.createElement("ul");
+          listElement.appendChild(childListElement);
+
+          if (launchEntry.launch_procinfo !== null) {
+            addZombieProcinfo(launchEntry.launch_procinfo, childListElement);
+          }
+          if (launchEntry.monitor_procinfo !== null) {
+            addZombieProcinfo(launchEntry.monitor_procinfo, childListElement);
+          }
+        }
+      }
+
+      if (orphanArray !== null && orphanArray.length > 0) {
+        var header = document.createElement("h3");
+        header.innerText = "Orphans:";
+        header.setAttribute("class", "zombie-list");
+        zombieContainer.appendChild(header);
+
+        orphanListElement = document.createElement("ul");
+        orphanListElement.setAttribute("class", "zombie-list");
+        zombieContainer.appendChild(orphanListElement);
+        for (var i = 0; i < orphanArray.length; i++) {
+          addZombieProcinfo(orphanArray[i], orphanListElement);
+        }
       }
     }
 
-    function statusCallback(data) {
+    function statusCallback(data, systemdMode) {
       // Example Format: [{"id": "mything", "friendly_name": "My Thing", "status": "running", "topics_found": 2, "topics_count": 8}, ...]
 
       var id_list = [];
@@ -363,18 +565,16 @@
           addItem(entry.id, entry.friendly_name);
         } else {
           id_list.splice(existingIdx, 1);
+          id_list.splice(id_list.indexOf("launchdetails-" + entry["id"]), 1);
         }
 
-        refreshState(entry);
+        refreshState(entry, systemdMode);
       }
 
       // Remove stale items
       for (var i = 0; i < id_list.length; i++) {
         document.getElementById(id_list[i]).remove();
       }
-
-      // Add any zombies to the list
-      addZombies(data);
     }
 
     function launchCallback(data) {
@@ -403,13 +603,18 @@
         });
     }
 
-    function restartClicked() {
-      fetch(url_root + "/restart", { method: "POST" }).then(function (response) {
+    function restartServiceClicked() {
+      fetch(url_root + "/restart_service", { method: "POST" }).then(function (response) {
         if (!response.ok) {
-          alert("Error issuing restart:\n" + response.statusText);
-        };
+          alert("Error issuing service restart:\n" + response.statusText);
+        } else {
+          disconnected = true;
+          document.getElementById("zombies").innerHTML = "";
+          document.getElementById("bringup_table").innerHTML =
+            "<td colspan='3' class='msg-header' id='errmsg'>Restarting...</td>";
+        }
       }).catch((error) =>
-        alert("Error issuing restart:\n" + error)
+        alert("Error issuing service restart:\n" + error)
       );
     }
 
@@ -466,20 +671,18 @@
         });
     };
 
-    var disconnected = false;
     var failureCount = 0;
     var intervalId = setInterval(function () {
       fetch(url_root + "/status", { method: "GET" })
-        .then((response) =>
-          response.json().then((json) => {
-            if (!response.ok) {
-              failureCount += 1;
-              if (failureCount > 3) {
-                disconnected = true;
-                document.getElementById("bringup_table").innerHTML =
-                  "<td colspan='3' class='msg-header' id='errmsg'>Server Error: " + response.statusText + "</td>";
-              }
-            } else {
+        .then((response) => {
+          if (!response.ok) {
+            console.error("Invalid Server Response: ", response.status, response.statusText);
+            document.getElementById("zombies").innerHTML = "";
+            document.getElementById("bringup_table").innerHTML =
+              "<td colspan='3' class='msg-header' id='errmsg'>Server Error</td>";
+          }
+          else {
+            response.json().then((json) => {
               var selector = document.getElementById("launches")
               if (disconnected) {
                 if (selector.selectedIndex >= 0) {
@@ -489,16 +692,28 @@
                 document.getElementById("bringup_table").innerHTML = "";
                 disconnected = false;
               }
-              statusCallback(json);
+              if (json["systemd_mode"]) {
+                document.getElementById("restartServiceBtn").style.display = "revert";
+              }
+              else {
+                document.getElementById("restartServiceBtn").style.display = "none";
+              }
+              statusCallback(json["launches"], json["systemd_mode"]);
+              addZombies(json);
               failureCount = 0;
-            }
-          })
-        )
-        .catch((error) => {
+            }).catch((error) => {
+              console.error("Failed to Decode JSON: ", error);
+              document.getElementById("zombies").innerHTML = "";
+              document.getElementById("bringup_table").innerHTML =
+                "<td colspan='3' class='msg-header' id='errmsg'>Client Error</td>";
+            });
+          }
+        }).catch((error) => {
           console.error("Failed to Refresh: ", error);
           failureCount += 1;
           if (failureCount > 3) {
             disconnected = true;
+            document.getElementById("zombies").innerHTML = "";
             document.getElementById("bringup_table").innerHTML =
               "<td colspan='3' class='msg-header' id='errmsg'>Connection Lost</td>";
           }
