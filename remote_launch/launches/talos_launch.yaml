@@ -10,6 +10,7 @@ launches: [
       "/talos/dvl/status", "nortek_dvl_msgs/msg/DvlStatus", "0",
       "/talos/vectornav/imu", "sensor_msgs/msg/Imu", "0",
       "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
+      "/talos/gyro/raw", "riptide_msgs2/msg/Int32Stamped", "0",
     ]
   },
   {
