@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>ROS 2 Remote Launcher</title>
+
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/xterm.css" />
+  <script src="/xterm.js"></script>
+  <script src="/addon-fit.js"></script>
+  <script src="/main.js"></script>
+
+</head>
+
+<body>
+  <div class="main-container">
+    <div class="launch-content">
+      <table>
+        <thead>
+          <tr>
+            <th>Launch File</th>
+            <th>Actions</th>
+            <th>Progress</th>
+          </tr>
+        </thead>
+        <tbody id="bringup_table"></tbody>
+      </table>
+      <table>
+        <tr>
+          <th>
+            <button id="shutDownCleanBtn" disabled="true"
+              onclick="if(confirm('Are you sure you want to stop all launches & the launch manager?')) cleanShutDownClicked();">
+              Shut Down Launcher
+            </button>
+            <button id="restartImmediateBtn" style="display: none" disabled="true"
+              onclick="if(confirm('ATTENTION! This kills the launch service and all running nodes WITHOUT CLEANUP!\n' +
+                          'Close all running RVIZ/ros monitoring tools before pressing OK!'))
+                          restartImmediateClicked();">
+              Force Reset
+            </button>
+          </th>
+          <th>
+            <select name="launches" id="launches" onchange="launchSelected()" disabled="true"></select>
+            &nbsp;&nbsp;
+            <label class="log-default-label">
+              <input type="checkbox" id="log-default-checkbox" checked="true" onchange="logByDefaultChanged()"/>
+              Log by Default
+            </label>
+          </th>
+        </tr>
+        <tbody id="control_table"></tbody>
+      </table>
+      <div id="zombies"></div>
+    </div>
+    <div class="terminal-container" style="display: none">
+      <div class="term-resize-bar"></div>
+      <button class="termclose-btn">&times;</button>
+      <div id="terminal" class="terminal-view"></div>
+    </div>
+  </div>
+  <button class="termopen-btn">
+    <img class="termopen-icon" src="/terminal.png" />
+    <span class="termopen-icon">Launch Log</span>
+  </button>
+</body>
+
+</html>

@@ -1,0 +1,311 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f2f2f2;
+  margin: 0;
+  padding: 0;
+}
+
+.main-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.launch-content {
+  padding: 10px;
+  flex: 1;
+  overflow: auto;
+  min-height: 150px;
+}
+
+/**********************
+ * Launch List Styling
+ *********************/
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  table-layout: fixed;
+}
+
+th,
+td {
+  padding: 10px;
+  text-align: left;
+}
+
+td.name-box {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td.button-box {
+  min-width: 40px;
+}
+
+td.progress-box {
+  min-width: 25%;
+}
+
+th {
+  background-color: #555;
+  color: #fff;
+}
+
+tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+/* Style for critical error messages */
+.msg-header {
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.expand-info-btn {
+  font-weight: bold;
+  font-size: 1.2em;
+  padding-right: 0.25em;
+  cursor: pointer;
+  user-select: none;
+  display: inline-block;
+  width: 0.75em;
+}
+
+.log-default-label {
+  font-weight: normal;
+  text-wrap: nowrap;
+}
+
+.log-checkbox-label {
+  text-wrap: nowrap;
+  color: #222;
+}
+
+.launchdetails-contents {
+  padding: 0.75em;
+  background-color: #ccc;
+}
+
+h4.launchdetails-info {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+  padding-top: 0.5em;
+}
+ul.launchdetails-info {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0.5em;
+  padding-bottom: 0.5em;
+  padding-right: 0.5em;
+}
+
+.launchdetails-topic-name {
+  font-family: monospace;
+}
+.launchdetails-topic-seen {
+  color: green;
+}
+.launchdetails-topic-unseen {
+  color: red;
+  font-weight: bold;
+}
+
+.progress-bar {
+  height: 20px;
+  width: 100%;
+  background-color: #ddd;
+  border: 1px solid #888;
+  border-radius: 5px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-error {
+  background-color: #ff6e6e;
+}
+
+.progress-info-error {
+  color: #3c3c3c !important;
+}
+
+.progress {
+  height: 20px;
+  background-color: #4caf50;
+  color: #fff;
+  text-align: center;
+  line-height: 20px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+}
+
+.progress-info {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #666;
+}
+
+.start-button {
+  background-color: #4caf50;
+  color: #fff;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.stop-button {
+  background-color: #ff4500;
+  color: #fff;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.start-button:disabled, .stop-button:disabled {
+  background-color: #777;
+  color: #ddd;
+  cursor: revert;
+}
+
+.start-button:hover:enabled {
+  background-color: #449847;
+}
+
+.stop-button:hover:enabled {
+  background-color: #c23400;
+}
+
+/**********************
+ * Zombie List Styles
+ *********************/
+
+.zombie-list {
+  background-color: #ff5555;
+}
+h3.zombie-list {
+  margin-bottom: 0;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+  padding-top: 0.5em;
+}
+ul.zombie-list {
+  margin-top: 0;
+  padding-top: 0.5em;
+  padding-bottom: 0.5em;
+  padding-right: 0.5em;
+}
+.procinfo {
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  list-style-position: inside;
+}
+.procinfo-pid {
+  font-weight: bold;
+}
+
+/**********************
+ * Terminal Box Styling
+ *********************/
+
+.terminal-container {
+  position: relative;
+  overflow: hidden;
+  height: 40%;         /* Initial terminal height */
+  min-height: 150px;
+  background: #f0f0f0; /* Background color for visibility */
+}
+
+.term-resize-bar {
+  height: 10px;
+  background: #333;
+  cursor: ns-resize;
+  position: absolute;
+  top: -5px; /* Position the resizer at the top edge of the terminal view */
+  left: 0;
+  width: 100%;
+  border-top: 1px solid #999; /* Top border to make it visible */
+  border-bottom: 1px solid #999; /* Bottom border for a clearer edge */
+  z-index: 1; /* Ensure it is on top of other elements */
+}
+
+.terminal-view {
+  background: #222;
+  color: #fff;
+  padding: 10px;
+  height: calc(100% - 10px); /* Adjust height to account for the resizer */
+  position: relative;
+  align-content: end;
+}
+
+.termclose-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #ff4500;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 2; /* Ensure it is above other elements */
+}
+
+.termclose-btn:hover {
+  background: #c23400;
+}
+
+.termopen-btn {
+  position: fixed;
+  bottom: 0; /* Align with the bottom of the viewport */
+  left: 10px; /* Offset from the left of the viewport a bit */
+  background: #798088;
+  color: #fff;
+  border: none;
+  border-radius: 10px 10px 0 0; /* Rounded top corners */
+  height: 2.5em;
+  font-size: 1em;
+  text-align: center;
+  cursor: pointer;
+  z-index: 2; /* Ensure it is on top of other elements */
+  transform: translateY(0); /* Remove any floating effect */
+
+  /* Remove padding & margin, we'll center the contents and ignore the rest */
+  margin: 0;
+  padding-left: 0.75em;
+  padding-right: 0.75em;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.termopen-btn:hover {
+  background: #656b73;
+}
+
+.termopen-icon {
+  padding-right: 0.25em;
+  vertical-align: middle;
+}
+.termopen-label {
+  vertical-align: middle;
+}
