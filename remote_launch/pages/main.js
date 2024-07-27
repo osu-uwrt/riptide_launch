@@ -26,8 +26,9 @@ var baseTheme = {
 var logLevelColorMap = {
   starting: "\x1B[1;36m",
   running: "\x1B[1;32m",
-  stopping: "\x1B[1;91m",
+  stopping: "\x1B[1;38:5:208m",
   global: "\x1B[1;35m",
+  global_error: "\x1B[1;31m"
 }
 const term = new Terminal({
   fontFamily: '"Cascadia Code", Menlo, monospace',
@@ -246,6 +247,7 @@ function addLaunchEntry(launchId, friendlyName) {
   logCheckbox.type = "checkbox";
   logCheckbox.checked = JSON.parse(localStorage.logging_enable_default);
   logCheckbox.id = "launchentry-" + launchId + "-log-en";
+  logCheckbox.classList.add("log-checkbox-input");
   logCheckbox.onchange = function () {
     logCheckboxChanged(launchId);
   };
@@ -304,10 +306,16 @@ function showCriticalError(msg) {
   msgElement.innerText = msg;
   bringupTable.appendChild(msgElement);
 
+  // Disable all global elements on fatal error
   document.getElementById("shutDownCleanBtn").disabled = true;
   document.getElementById("restartImmediateBtn").disabled = true;
   document.getElementById("launches").disabled = true;
   document.getElementById('log-default-checkbox').disabled = true;
+
+  if (document.getElementById("discovery-server-status").style.color != "red") {
+    // Only hide discovery server info if we don't have an error (color red)
+    document.getElementById("discovery-server-info").style.display = "none";
+  }
 
   errorShown = true;
 }
@@ -345,7 +353,7 @@ function addZombies(statusResp) {
   zombieContainer.innerHTML = '';
 
   var listElement = null;
-  for (var i in statusResp.launches) {
+  for (var i = 0; i < statusResp.launches.length; i++) {
     var launchEntry = statusResp.launches[i];
     if (!launchEntry.is_zombie) {
       continue;
@@ -388,7 +396,7 @@ function addZombies(statusResp) {
     var orphanListElement = document.createElement("ul");
     orphanListElement.classList.add("zombie-list");
     zombieContainer.appendChild(orphanListElement);
-    for (var i in statusResp.orphans) {
+    for (var i = 0; i < statusResp.orphans.length; i++) {
       addProcinfo(statusResp.orphans[i], orphanListElement);
     }
   }
@@ -410,7 +418,7 @@ function statusCallback(resp) {
   }
 
   // Update all launches that we are provided in status
-  for (var i in resp.launches) {
+  for (var i = 0; i < resp.launches.length; i++) {
     var entry = resp.launches[i];
     if (entry.is_zombie) {
       continue;
@@ -429,7 +437,7 @@ function statusCallback(resp) {
   }
 
   // Remove any launch items that weren't in the list
-  for (var i in id_list) {
+  for (var i = 0; i < id_list.length; i++) {
     document.getElementById(id_list[i]).remove();
   }
 
@@ -442,6 +450,16 @@ function statusCallback(resp) {
 
   // Handle zombies
   addZombies(resp);
+
+  // Handle discovery server status
+  document.getElementById("discovery-server-info").style.display = null;  // Clear the display: none
+  var discovery_status = document.getElementById("discovery-server-status");
+  if (discovery_status.innerText != resp.discovery_status) {
+    discovery_status.innerText = resp.discovery_status;
+  }
+  if (discovery_status.style.color != resp.discovery_status_color) {
+    discovery_status.style.color = resp.discovery_status_color;
+  }
 }
 
 function firstConnectCallback(resp) {
@@ -450,7 +468,7 @@ function firstConnectCallback(resp) {
   while (selector.firstChild) {
     selector.removeChild(selector.firstChild);
   }
-  for (var i in resp.launch_files) {
+  for (var i = 0; i < resp.launch_files.length; i++) {
     var entry = resp.launch_files[i];
     var cleanName = entry.substr(entry.lastIndexOf("/") + 1);
     var option = new Option(cleanName, entry);
@@ -555,7 +573,13 @@ function launchSelected() {
 function logByDefaultChanged() {
   var checkbox = document.getElementById('log-default-checkbox');
   checkbox.disabled = true;
-  // TODO: Disable all other checkboxes as well
+
+  // Disable all other checkboxes as well since this will refresh them all
+  var launchCheckboxes = document.querySelectorAll(".log-checkbox-input");
+  for (var i = 0; i < launchCheckboxes.length; i++) {
+    launchCheckboxes[i].disabled = true;
+  }
+
   ws.send(JSON.stringify({
     cmd: "set_logdefault",
     enable: checkbox.checked
@@ -705,6 +729,7 @@ window.onload = function () {
   document.getElementById("shutDownCleanBtn").disabled = true;
   document.getElementById("restartImmediateBtn").disabled = true;
   document.getElementById("launches").disabled = true;
+  document.getElementById("discovery-server-info").style.display = "none";
 
   var logDefaultCheckbox = document.getElementById('log-default-checkbox');
   logDefaultCheckbox.disabled = true;

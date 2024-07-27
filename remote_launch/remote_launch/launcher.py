@@ -1,18 +1,22 @@
 # Python 3 server example
 import asyncio
 import contextlib
-import http
-import logging
-import os, sys, json, yaml, signal
 import enum
+import http
+import json
+import logging
 import mimetypes
+import os
 import platform
 import re
-import time
 import signal
+import socket
+import sys
+import time
 import uuid
-import websockets
 import weakref
+import websockets
+import yaml
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -22,8 +26,52 @@ SUPER_SECRET_MONITOR_FLAG = "--super-secret-monitoring-flag"
 log_format = "[%(name)s] %(message)s"
 log_level = logging.INFO
 serverPort = 8080
+self_hosted_discovery_server_cmd = "fastdds discovery -i 0"
+self_hosted_discovery_server_addr = "localhost:11811"
 
 HTML_SERVER_ROOT = os.path.join(get_package_share_directory("remote_launch"), "pages")
+
+class SDNotify:
+    # systemd notifier socket, so we can send signals to systemd to report our state properly
+
+    def __init__(self, systemd_mode: bool):
+        if systemd_mode:
+            # Get socket address
+            if not "NOTIFY_SOCKET" in os.environ:
+                raise RuntimeError("Could not find 'NOTIFY_SOCKET' Ensure this is running as a systemd unit!")
+            sock_addr = os.environ["NOTIFY_SOCKET"]
+            if sock_addr[0] == '@':
+                sock_addr = '\0' + sock_addr[1:]
+
+            # Connect to socket
+            self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            self._sock.connect(sock_addr)
+        else:
+            self._sock = None
+
+    def _notify(self, packet: str):
+        if self._sock is not None:
+            # Sends the packet to systemd
+            self._sock.sendall(packet.encode())
+
+    def report_ready(self):
+        self._notify("READY=1")
+
+    def report_stopping(self):
+        self._notify("STOPPING=1")
+
+    def report_status(self, msg):
+        self._notify("STATUS=" + msg)
+
+    def trigger_watchdog(self):
+        self._notify("WATCHDOG=trigger")
+
+    def _take_ownership(self):
+        # This takes ownership of the service (rather than ros2 run)
+        # This will restrict access of the socket to just this program, and
+        # ensures that systemd is tracking this process instead of the ros2 run
+        self._notify(f"MAINPID={os.getpid()}")
+        self._notify("NOTIFYACCESS=main")  # Restrict socket so only we can control it
 
 class LinuxProcess:
     @staticmethod
@@ -340,14 +388,18 @@ class LaunchData:
         popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_LAUNCH_FLAG,
                       self.package, self.file]
         popen_args.extend(self.args)
+        # Start passing stdout and stderr through a pipe so we can log it to the websocket, and create new
+        # session so it's isolated from Control+C on the terminal
         self._launch_subproc = await asyncio.create_subprocess_exec(*popen_args, stdout=asyncio.subprocess.PIPE,
-                                                                    stderr=asyncio.subprocess.STDOUT)
+                                                                    stderr=asyncio.subprocess.STDOUT,
+                                                                    start_new_session=True)
 
-        # pipe stdout to this process with noblock
+        # pipe stdout to this process to receive topic notifications, and in new session to isolate Control+C
         if len(self.monitored_topics) > 0:
             popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_MONITOR_FLAG]
             popen_args.extend(self._gen_monitor_cmd_args())
-            self._monitor_subproc = await asyncio.create_subprocess_exec(*popen_args, stdout=asyncio.subprocess.PIPE)
+            self._monitor_subproc = await asyncio.create_subprocess_exec(*popen_args, stdout=asyncio.subprocess.PIPE,
+                                                                         start_new_session=True)
         else:
             self._monitor_subproc = None
 
@@ -427,7 +479,8 @@ class LaunchData:
         # Wait for all remaining processes
         if self._launch_subproc is not None:
             try:
-                self._launch_subproc.send_signal(signal.SIGINT)
+                # Send SIGINT to entire launch progress group
+                os.killpg(os.getpgid(self._launch_subproc.pid), signal.SIGINT)
             except ProcessLookupError:
                 # It's okay if we fail, that means the process died just as we sent the signal
                 # However, we want to set STOPPING_ERROR so we know it died rather than potentially stopping gracefully
@@ -436,7 +489,7 @@ class LaunchData:
 
         if self._monitor_subproc is not None:
             try:
-                self._monitor_subproc.send_signal(signal.SIGINT)
+                os.killpg(os.getpgid(self._monitor_subproc.pid), signal.SIGINT)
             except ProcessLookupError:
                 # Same as above, but if monitor dies then it isn't as bad, just keep the last reported state
                 pass
@@ -499,6 +552,10 @@ class LaunchData:
     @property
     def can_terminate(self):
         return self.state == LaunchState.RUNNING
+
+    @property
+    def is_alive(self):
+        return self._launch_task_inst is not None
 
     @property
     def is_dead_zombie(self) -> bool:
@@ -588,16 +645,17 @@ class LaunchServer:
                 "type": "log",
                 "time": time.time(),
                 "name": record.name,
-                "state": "global",
+                "state": "global" if record.levelno < logging.ERROR else "global_error",
                 "data": record.getMessage()
             }
             websockets.broadcast(connections, json.dumps(log_obj, default=json_encode_default))
 
-    def __init__(self, systemd_mode: bool) -> None:
+    def __init__(self, systemd_mode: bool, start_discovery_server: bool) -> None:
         self.launches: 'list[LaunchData]' = []
         self.last_process_map: 'dict[int, LinuxProcess] | None' = None
         self.current_file = ""
         self.systemd_mode = systemd_mode
+        self.start_discovery_server = start_discovery_server
         self.connections = set()
         self.default_log_connections = set()  # List of all connections to enable logs for a launch by default
 
@@ -611,6 +669,20 @@ class LaunchServer:
         launch_entries = os.listdir(os.path.join(pack_path, "launches"))
         self.launch_files = [x for x in launch_entries if x.endswith('.yaml') or x.endswith('.yml')]
 
+        # Determine how the fastdds discovery server is configured
+        self.discovery_server_pid = 0  # Holds PID of discovery server if running for systemd orphan tracking
+        if start_discovery_server:
+            self.discovery_status = "Self Hosted (OK)"
+            self.discovery_status_color = "green"
+        elif "ROS_DISCOVERY_SERVER" in os.environ:
+            self.discovery_status = f"External ({os.environ['ROS_DISCOVERY_SERVER']})"
+            self.discovery_status_color = "green"
+        else:
+            self.discovery_status = "None (Falling back to Dynamic Discovery)"
+            self.discovery_status_color = "#e19914"
+
+        # systemd service stuff
+        self.sdnotify = SDNotify(self.systemd_mode)
         if self.systemd_mode:
             self.cgroup = get_service_cgroup()
 
@@ -624,7 +696,9 @@ class LaunchServer:
             "type": "status",
             "current_launchfile": os.path.basename(self.current_file),
             "launches": self.launches,
-            "orphans": list(self.last_process_map.values()) if self.systemd_mode and self.last_process_map is not None else None
+            "orphans": list(self.last_process_map.values()) if self.systemd_mode and self.last_process_map is not None else None,
+            "discovery_status": self.discovery_status,
+            "discovery_status_color": self.discovery_status_color
         }
 
     def load_file(self, file_path: str):
@@ -652,6 +726,67 @@ class LaunchServer:
 
     def _generate_err(self, msg):
         return {"type": "error", "msg": msg}
+
+    async def run_discovery_server(self):
+        try:
+            self.logger.info("Starting Discovery Server")
+            proc = await asyncio.create_subprocess_shell(self_hosted_discovery_server_cmd, start_new_session=True)
+            self.discovery_server_pid = proc.pid
+
+            while not self.stop.is_set():
+                # Wait only for a short amount of time
+                # This is so when we interrupt it, we are almost always checking the self.stop event
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(proc.wait(), 0.05)
+                if proc.returncode is not None:
+                    # Send crash event to all the clients
+                    self.discovery_status = "Self Hosted (CRASHED!)"
+                    self.discovery_status_color = "red"
+                    self.broadcast_refresh_event.set()
+                    self.logger.critical(f"Discovery Server Died! (Exit Code: {proc.returncode})")
+                    # Give half a second for the failure message to go out
+                    await asyncio.sleep(0.5)
+
+                    # Raise an exception (which will set the stop flag)
+                    raise RuntimeError(f"Discovery Server Died (Exit Code: {proc.returncode})")
+                # Rate limit polling to once per second
+                await event_wait(self.stop, 1.0)
+
+            # Send interrupt and wait for discovery server to stop
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+            except:
+                pass
+            await proc.wait()
+        finally:
+            # Set stop if we ever return so we quickly see the exception
+            # This should never crash (unless the discovery server itself crashes)
+            self.stop.set()
+
+    def report_systemd_status(self):
+        if not self.systemd_mode:
+            return
+
+        if self.current_file == "":
+            base_status = "No Launchfile Selected"
+        else:
+            base_status = f"Current Launchfile: {os.path.basename(self.current_file)}"
+
+        active_count = 0
+        zombie_count = 0
+        for launch in self.launches:
+            if launch.is_alive:
+                active_count += 1
+            if launch.is_zombie:
+                zombie_count += 1
+
+        if zombie_count > 0:
+            launch_status = f"{active_count} Launches Active; {zombie_count} Abandoned"
+        else:
+            launch_status = f"{active_count} Launches Active"
+
+        status = f"{base_status}; {launch_status}"
+        self.sdnotify.report_status(status)
 
     ########################################
     # Request Handling/Background Tick Code
@@ -692,6 +827,7 @@ class LaunchServer:
         # But, once the service dies systemd will clean everything up for us anyways
         elif request["cmd"] == "kill_server_now":
             if self.systemd_mode:
+                self.sdnotify.trigger_watchdog()
                 os._exit(0)
             else:
                 return self._generate_err("Can only perform immediate restart when running in systemd mode")
@@ -779,6 +915,8 @@ class LaunchServer:
 
     async def status_broadcast_task(self):
         try:
+            self.report_systemd_status()
+
             # This runs as a server in the background, and is responsible for broadcasting any updated states to the clients
             while True:
                 # Wait for event, or refresh every 1.5 seconds otherwise
@@ -788,6 +926,8 @@ class LaunchServer:
                 # Fetch current process map so we can check for orphans if in systemd mode
                 if self.systemd_mode:
                     self.last_process_map = get_cgroup_processes(self.cgroup)
+                    if self.discovery_server_pid != 0 and self.discovery_server_pid in self.last_process_map:
+                        self.last_process_map.pop(self.discovery_server_pid)
                 else:
                     self.last_process_map = None
 
@@ -797,6 +937,9 @@ class LaunchServer:
 
                 # Clean up any zombies
                 self._cleanup_dead_zombies()
+
+                # Report the current launch status to systemd
+                self.report_systemd_status()
 
                 # Broadcast the new server status
                 websockets.broadcast(self.connections, json.dumps(self.server_status, default=json_encode_default))
@@ -900,12 +1043,20 @@ class LaunchServer:
         self.stop = asyncio.Event()
         signal.signal(signal.SIGINT, self._keyboard_int_handler)
 
+        if self.start_discovery_server:
+            os.environ["ROS_DISCOVERY_SERVER"] = self_hosted_discovery_server_addr
+            discovery_server_task = loop.create_task(self.run_discovery_server(), name="Discovery Server Monitor")
+        else:
+            discovery_server_task = None
+
         broadcast_task = loop.create_task(self.status_broadcast_task(), name="Status Broadcast Task")
         self.broadcast_refresh_event = asyncio.Event()
         try:
             async with websockets.serve(self.ws_conn_handler, "0.0.0.0", serverPort,
                                         process_request=self.process_request):
                 self.logger.info("Server started http://%s:%s" % (platform.node(), serverPort))
+
+                self.sdnotify.report_ready()
                 await self.stop.wait()
 
             # Check if broadcast task is completed (that means it has crashed)
@@ -914,9 +1065,15 @@ class LaunchServer:
                 broadcast_task.result()
         finally:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
+            self.sdnotify.report_stopping()
+
             if not broadcast_task.done():
                 broadcast_task.cancel()
             await self.cleanup_launches()
+
+            # Wait for discovery server to shut down (and will bubble any exceptions up)
+            if discovery_server_task is not None:
+                await discovery_server_task
 
     async def cleanup_launches(self):
         # Don't let control c kill it so we don't leave stragglers
@@ -1009,7 +1166,7 @@ def do_child_monitor():
         topics.append((sys.argv[i], sys.argv[i+1], sys.argv[i+2]))
 
     # prepare the monitor
-    monitor = ChildMonitor(f"monitor_{uuid.uuid4().hex}")
+    monitor = ChildMonitor(f"launch_monitor_{uuid.uuid4().hex}")
     monitor.start_monitors(topics)
 
     # free run the monitor until shutdown
@@ -1027,8 +1184,6 @@ def main():
 
     # Handle the launch startup
     if len(sys.argv) > 2 and sys.argv[1] == SUPER_SECRET_LAUNCH_FLAG:
-        os.setpgrp()  # We only want control C to go to the remote launch server
-
         logger = logging.getLogger(f"Child Launch-{os.getpid()}")
         logger.setLevel(log_level)
 
@@ -1058,8 +1213,6 @@ def main():
 
     # if we detect the monitor flag launch the child monitor
     elif len(sys.argv) > 1 and sys.argv[1] == SUPER_SECRET_MONITOR_FLAG:
-        os.setpgrp()  # We only want control C to go to the remote launch server
-
         # Child monitor is in its own function so the parent doesn't even know what ROS is
         do_child_monitor()
 
@@ -1069,7 +1222,13 @@ def main():
             systemd_mode = True
         else:
             systemd_mode = False
-        server = LaunchServer(systemd_mode)
+        if len(sys.argv) > 1 and "--start-discovery-server" in sys.argv:
+            if not systemd_mode:
+                raise RuntimeError("Cannot start discovery server unless running in systemd")
+            start_discovery_server = True
+        else:
+            start_discovery_server = False
+        server = LaunchServer(systemd_mode, start_discovery_server)
         asyncio.run(server.do_main())
 
 

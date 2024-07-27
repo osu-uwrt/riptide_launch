@@ -19,6 +19,11 @@ body {
   min-height: 150px;
 }
 
+#discovery-server-info {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
 /**********************
  * Launch List Styling
  *********************/
