@@ -10,7 +10,7 @@ launches: [
       "/talos/dvl/status", "nortek_dvl_msgs/msg/DvlStatus", "0",
       "/talos/vectornav/imu", "sensor_msgs/msg/Imu", "0",
       "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
-      "/talos/gyro/raw", "riptide_msgs2/msg/Int32Stamped", "0",
+      "/talos/gyro/raw", "riptide_msgs2/msg/Int32Stamped", "0"
     ]
   },
   {
@@ -23,7 +23,7 @@ launches: [
       "/talos/joint_states", "sensor_msgs/msg/JointState", "0",
       "/talos/odometry/filtered", "nav_msgs/msg/Odometry", "0",
       "/talos/depth/pose", "geometry_msgs/msg/PoseWithCovarianceStamped", "0",
-      "/tf", "tf2_msgs/msg/TFMessage", "0",
+      "/tf", "tf2_msgs/msg/TFMessage", "0"
     ]
   },
   {
@@ -36,7 +36,7 @@ launches: [
     topics: [
       "/talos/thruster_forces", "std_msgs/msg/Float32MultiArray", "0",
       "/talos/command/requested_rpm", "riptide_msgs2/msg/DshotCommand", "0",
-      "/talos/controller/FF_body_force", "geometry_msgs/msg/Twist", "0",
+      "/talos/controller/FF_body_force", "geometry_msgs/msg/Twist", "0"
     ]
   },
   {
