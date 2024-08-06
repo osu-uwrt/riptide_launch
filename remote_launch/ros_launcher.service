@@ -1,3 +1,12 @@
+# This is the sevice file to have the ros2 remote launcher autostart on the orin
+# This is recommended as it allows the remote launcher to keep track of all child processes
+# and report if any child launches escape the shutdown and become zombies
+#
+# This file should be installed to
+#   /etc/systemd/system/ros_launcher.service
+#
+# It can be enabled with `systemctl enable ros_launcher && systemctl start ros_launcher`
+
 [Unit]
 Description=ROS2 Remote Launcher (UWRT)
 Wants=network-online.target
@@ -10,7 +19,8 @@ StartLimitBurst=5
 
 [Service]
 # Command to launch the service
-ExecStart=bash -c 'source /home/ros/colcon_deploy/install/setup.bash; ros2 run remote_launch launcher --systemd --start-discovery-server'
+ExecStart=/bin/bash -c 'source /home/ros/colcon_deploy/install/setup.bash; python3 /home/ros/colcon_deploy/install/remote_launch/lib/remote_launch/launcher --systemd --start-discovery-server'
+Environment="DISCOVERY_SERVER_CMD='/home/ros/robert_stuff/fast-discovery-server -i 0'"
 WorkingDirectory=/home/ros
 User=ros
 Group=ros

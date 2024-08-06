@@ -26,7 +26,8 @@ SUPER_SECRET_MONITOR_FLAG = "--super-secret-monitoring-flag"
 log_format = "[%(name)s] %(message)s"
 log_level = logging.INFO
 serverPort = 8080
-self_hosted_discovery_server_cmd = "fastdds discovery -i 0"
+self_hosted_discovery_server_cmd = os.environ["DISCOVERY_SERVER_CMD"] if "DISCOVERY_SERVER_CMD" in os.environ else \
+    "fastdds discovery -i 0"
 self_hosted_discovery_server_addr = "localhost:11811"
 
 HTML_SERVER_ROOT = os.path.join(get_package_share_directory("remote_launch"), "pages")
@@ -202,22 +203,33 @@ class LinuxProcess:
 def get_service_cgroup():
     with open('/proc/self/cgroup') as f:
         groups = f.readlines()
-        if len(groups) > 1:
-            raise RuntimeError("Multiple cgroups found (cgroupv1 system?):\n\t" + "\t".join(groups))
-        elif len(groups) == 0:
+        if len(groups) == 0:
             raise RuntimeError("Process is not part of a cgroup")
-        group = groups[0].strip()
-        hid, controllers, path = group.split(":")
-        if hid != "0" or controllers != "":
-            raise RuntimeError("Invalid cgroup v2 definition (maybe v1 system?)")
-        path = path.strip('/') # Remove both leading and trailing slash for service detection and os.path.join
-        if not path.endswith('.service'):
-            raise RuntimeError(f"Process is not in a service top level cgroup! (found {path})\n"
-                               "Make sure you run this program as a service in --systemd mode!")
-        sysfs_path = os.path.join("/sys/fs/cgroup", path)
-        if not os.path.exists(sysfs_path):
-            raise RuntimeError(f"Could not find cgroup info in expected directory: {sysfs_path}")
-        return sysfs_path
+        elif len(groups) > 1:
+            group_map = dict(map(lambda x: (int(x.split(':')[0]), x.split(':')[2].strip()), groups))
+            path = group_map[0]
+            path = path.strip('/') # Remove both leading and trailing slash for service detection and os.path.join
+            if not path.endswith('.service'):
+                raise RuntimeError(f"Process is not in a service top level cgroup! (found {path})\n"
+                                "Make sure you run this program as a service in --systemd mode!")
+            sysfs_path = os.path.join('/sys/fs/cgroup/systemd', path)
+            if not os.path.exists(sysfs_path):
+                raise RuntimeError(f"Could not find cgroup info in expected directory: {sysfs_path}")
+            return sysfs_path
+        else:
+            # cgroup v2
+            group = groups[0].strip()
+            hid, controllers, path = group.split(":")
+            if hid != "0" or controllers != "":
+                raise RuntimeError("Invalid cgroup v2 definition (maybe v1 system?)")
+            path = path.strip('/') # Remove both leading and trailing slash for service detection and os.path.join
+            if not path.endswith('.service'):
+                raise RuntimeError(f"Process is not in a service top level cgroup! (found {path})\n"
+                                "Make sure you run this program as a service in --systemd mode!")
+            sysfs_path = os.path.join("/sys/fs/cgroup", path)
+            if not os.path.exists(sysfs_path):
+                raise RuntimeError(f"Could not find cgroup info in expected directory: {sysfs_path}")
+            return sysfs_path
 
 def get_cgroup_processes(cgroup_path):
     with open(os.path.join(cgroup_path, "cgroup.procs")) as f:
@@ -292,7 +304,10 @@ class LaunchData:
 
         # Launch Information (decoded from JSON)
         self.id = str(uuid.uuid4())
-        self.friendly_name: str = launch["file"].removesuffix(".launch.py")
+        if launch["file"].endswith(".launch.py"):
+            self.friendly_name: str = launch["file"][:-10]
+        else:
+            self.friendly_name: str = launch["file"]
         self.package: str = launch["package"]
         self.file: str = launch["file"]
         self.state = LaunchState.STOPPED
