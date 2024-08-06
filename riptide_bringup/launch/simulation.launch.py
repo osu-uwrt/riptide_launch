@@ -28,6 +28,12 @@ def generate_launch_description():
             description="Whether or not the active control should be launched with the system."
         ),
         
+        DeclareLaunchArgument(
+            "with_camera_faker",
+            default_value="True",
+            description="Enable or disable the camera faker"
+        ),
+        
         # launch regular bringup processes
         IncludeLaunchDescription(
             AnyLaunchDescriptionSource(
@@ -57,7 +63,8 @@ def generate_launch_description():
             ),
             
             launch_arguments=[
-                ('robot', LC('robot'))
+                ('robot', LC('robot')),
+                ('with_camera_faker', LC('with_camera_faker'))
             ]
         )
     ])
