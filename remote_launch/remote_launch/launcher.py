@@ -166,7 +166,7 @@ class LinuxProcess:
                 args_raw = f.read().decode(errors="replace")
             self._args = args_raw.split('\0')
             return self._args
-        except FileNotFoundError:
+        except FileNotFoundError or ProcessLookupError:
             return None
 
     def get_process_str(self):
