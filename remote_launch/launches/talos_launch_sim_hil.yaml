@@ -48,5 +48,21 @@ launches: [
       "robot:=talos"
     ],
     topics: [ ]
+  },
+  {
+    package: "riptide_rviz",
+    file: "rviz_start.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
+  },
+  {
+    package: "c_simulator",
+    file: "physics_simulator.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
   }
 ]
