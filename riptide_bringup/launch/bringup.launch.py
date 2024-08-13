@@ -62,6 +62,14 @@ def determine_launch_files(context, *args, **kwargs):
             'navigation.launch.py')
     )
     
+    add_launch_file(
+        os.path.join(
+            get_package_share_directory("tensor_detector"),
+            "launch",
+            "tensorrt.launch.py"
+        )
+    )
+    
     add_launch_file (
         os.path.join(
             get_package_share_directory('riptide_mapping2'),
