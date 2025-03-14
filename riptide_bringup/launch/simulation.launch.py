@@ -34,6 +34,12 @@ def generate_launch_description():
             description="Enable or disable the camera faker"
         ),
         
+        DeclareLaunchArgument(
+            'with_tensorrt',
+            default_value="True",
+            description="Whether or not to launch tensorrt."
+        ),
+        
         # launch regular bringup processes
         IncludeLaunchDescription(
             AnyLaunchDescriptionSource(
@@ -48,7 +54,8 @@ def generate_launch_description():
                 ('hardware', 'none'),
                 ('robot', LC('robot')),
                 ('active_control_enabled', LC('active_control_enabled')),
-                ('active_control_model', LC('active_control_model'))
+                ('active_control_model', LC('active_control_model')),
+                ('with_tensorrt', LC('with_tensorrt'))
             ]
         ),
         

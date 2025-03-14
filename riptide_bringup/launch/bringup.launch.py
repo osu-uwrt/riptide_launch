@@ -62,13 +62,14 @@ def determine_launch_files(context, *args, **kwargs):
             'navigation.launch.py')
     )
     
-    add_launch_file(
-        os.path.join(
-            get_package_share_directory("tensor_detector"),
-            "launch",
-            "tensorrt.launch.py"
+    if LC('with_tensorrt').perform(context) == "True":
+        add_launch_file(
+            os.path.join(
+                get_package_share_directory("tensor_detector"),
+                "launch",
+                "tensorrt.launch.py"
+            )
         )
-    )
     
     add_launch_file (
         os.path.join(
@@ -140,6 +141,12 @@ def generate_launch_description():
             'active_control_model',
             default_value=DEFAULT_ACTIVE_CONTROL_MODEL,
             description="The default active control model to use"
+        ),
+        
+        DeclareLaunchArgument(
+            'with_tensorrt',
+            default_value="True",
+            description="Whether or not to launch tensorrt."
         ),
         
         OpaqueFunction(function=determine_launch_files),
