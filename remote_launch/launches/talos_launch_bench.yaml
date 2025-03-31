@@ -4,7 +4,8 @@ launches: [
     file: "hardware_fake_dvl.launch.py",
     args: [
       "robot:=talos",
-      "gyro_port:=/dev/ttyTHS1"
+      "imu_port:=/dev/ttyTHS1",
+      "gyro_port:=/dev/ttyTHS2"
     ],
     topics: [
       "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
