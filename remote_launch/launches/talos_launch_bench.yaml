@@ -42,6 +42,17 @@ launches: [
     ]
   },
   {
+    package: "riptide_hardware2",
+    file: "zed.launch.py",
+    args: [
+      "robot:=talos",
+    ],
+    topics: [ 
+      "/talos/ffc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0",
+      "/talos/dfc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0"
+    ]
+  },
+  {
     package: "tensor_detector",
     file: "tensorrt.launch.py",
     args: [
