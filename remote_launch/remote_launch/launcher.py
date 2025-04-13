@@ -494,6 +494,12 @@ class LaunchData:
         # Wait for all remaining processes
         if self._launch_subproc is not None:
             try:
+                if self.launch_procinfo and (self.launch_procinfo.state == "Stopped" or self.launch_procinfo.state.startswith("Sleep")):
+                    # Process is stopped or sleeping, send SIGCONT first
+                    self.logger.info(f"Process {self._launch_subproc.pid} is {self.launch_procinfo.state}, sending SIGCONT first")
+                    os.killpg(os.getpgid(self._launch_subproc.pid), signal.SIGCONT)
+                    # Small delay to allow the process to resume
+                    await asyncio.sleep(0.1)
                 # Send SIGINT to entire launch progress group
                 os.killpg(os.getpgid(self._launch_subproc.pid), signal.SIGINT)
             except ProcessLookupError:
@@ -504,6 +510,13 @@ class LaunchData:
 
         if self._monitor_subproc is not None:
             try:
+                
+                # Same check for monitor process
+                if self.monitor_procinfo and (self.monitor_procinfo.state == "Stopped" or self.monitor_procinfo.state.startswith("Sleep")):
+                    self.logger.info(f"Process {self._monitor_subproc.pid} is {self.monitor_procinfo.state}, sending SIGCONT first")
+                    os.killpg(os.getpgid(self._monitor_subproc.pid), signal.SIGCONT)
+                    await asyncio.sleep(0.1)
+                            
                 os.killpg(os.getpgid(self._monitor_subproc.pid), signal.SIGINT)
             except ProcessLookupError:
                 # Same as above, but if monitor dies then it isn't as bad, just keep the last reported state
