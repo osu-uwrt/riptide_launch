@@ -32,8 +32,7 @@ launches: [
     package: "riptide_controllers2",
     file: "control_system.launch.py",
     args: [
-      "robot:=talos",
-      "active_control_model:=complete"
+      "robot:=talos"
     ],
     topics: [
       "/talos/thruster_forces", "std_msgs/msg/Float32MultiArray", "0",

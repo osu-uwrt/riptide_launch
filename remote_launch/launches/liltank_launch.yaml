@@ -30,12 +30,14 @@ launches: [
     file: "control_system.launch.py",
     args: [
       "robot:=liltank",
-      "active_control_model:=complete"
+      "core_reservation_enabled:=false"
     ],
     topics: [
       "/liltank/thruster_forces", "std_msgs/msg/Float32MultiArray", "0",
-      "/liltank/command/requested_rpm", "riptide_msgs2/msg/DshotCommand", "0",
-      "/liltank/controller/FF_body_force", "geometry_msgs/msg/Twist", "0"
+      "/liltank/command/motor/port", "std_msgs/msg/Float32", "0",
+      "/liltank/command/motor/stbd", "std_msgs/msg/Float32", "0",
+      "/liltank/command/thruster/port", "std_msgs/msg/Float32", "0",
+      "/liltank/command/thruster/stbd", "std_msgs/msg/Float32", "0"
     ]
   },
   {
