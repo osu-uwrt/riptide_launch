@@ -48,7 +48,6 @@ launches: [
     ],
     topics: [ 
       "/liltank/ffc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0",
-      "/liltank/dfc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0"
     ]
   },
   {
