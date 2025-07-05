@@ -5,6 +5,7 @@ launches: [
    args: [
       "robot:=liltank",
       "imu_port:=/dev/ttyTHS1",
+      "imu_frame_id:=liltank/imu_link",
     ],
     topics: [
       "/liltank/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",

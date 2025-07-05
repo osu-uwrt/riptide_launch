@@ -5,6 +5,7 @@ launches: [
     args: [
       "robot:=talos",
       "imu_port:=/dev/ttyTHS1",
+      "imu_frame_id:=talos/imu_link",
       "gyro_port:=/dev/ttyTHS2"
     ],
     topics: [
