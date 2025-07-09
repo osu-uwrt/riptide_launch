@@ -25,9 +25,9 @@ SUPER_SECRET_MONITOR_FLAG = "--super-secret-monitoring-flag"
 
 log_format = "[%(name)s] %(message)s"
 log_level = logging.INFO
-serverPort = 8080
-self_hosted_discovery_server_cmd = os.environ["DISCOVERY_SERVER_CMD"] if "DISCOVERY_SERVER_CMD" in os.environ else \
-    "ros2 run rmw_zenoh_cpp rmw_zenohd --config=/home/ros/osu-uwrt/release/scripts/dds_scripts/zenoh/zenoh_router_test.json5"
+serverPort = int(os.environ.get("SERVER_PORT", "8080"))
+self_hosted_discovery_server_cmd = os.environ.get("DISCOVERY_SERVER_CMD", 
+    "ros2 run rmw_zenoh_cpp rmw_zenohd --config=/home/ros/osu-uwrt/release/scripts/dds_scripts/zenoh/zenoh_router_test.json5")
 self_hosted_discovery_server_addr = "tcp/localhost:7447"
 
 HTML_SERVER_ROOT = os.path.join(get_package_share_directory("remote_launch"), "pages")
@@ -749,8 +749,19 @@ class LaunchServer:
 
     async def run_discovery_server(self):
         try:
-            self.logger.info("Starting Zenoh Router")
-            proc = await asyncio.create_subprocess_shell(self_hosted_discovery_server_cmd, start_new_session=True)
+            # First, try to kill any existing zenoh routers on the same port to avoid conflicts
+            try:
+                import subprocess
+                subprocess.run(["pkill", "-f", "rmw_zenohd"], check=False, capture_output=True)
+                await asyncio.sleep(1)  # Give time for cleanup
+            except:
+                pass
+            
+            self.logger.info(f"Starting Zenoh Router with command: {self_hosted_discovery_server_cmd}")
+            proc = await asyncio.create_subprocess_shell(self_hosted_discovery_server_cmd, 
+                                                       start_new_session=True,
+                                                       stdout=asyncio.subprocess.PIPE,
+                                                       stderr=asyncio.subprocess.PIPE)
             self.discovery_server_pid = proc.pid
 
             while not self.stop.is_set():
@@ -759,11 +770,18 @@ class LaunchServer:
                 with contextlib.suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(proc.wait(), 0.05)
                 if proc.returncode is not None:
+                    # Get stdout and stderr to help debug
+                    stdout, stderr = await proc.communicate()
+                    
                     # Send crash event to all the clients
                     self.discovery_status = "Self Hosted (CRASHED!)"
                     self.discovery_status_color = "red"
                     self.broadcast_refresh_event.set()
                     self.logger.critical(f"Zenoh Router Died! (Exit Code: {proc.returncode})")
+                    if stdout:
+                        self.logger.error(f"Zenoh Router stdout: {stdout.decode()}")
+                    if stderr:
+                        self.logger.error(f"Zenoh Router stderr: {stderr.decode()}")
                     # Give half a second for the failure message to go out
                     await asyncio.sleep(0.5)
 
@@ -1064,7 +1082,7 @@ class LaunchServer:
         signal.signal(signal.SIGINT, self._keyboard_int_handler)
 
         if self.start_discovery_server:
-            os.environ["ZENOH_ROUTER_CONFIG_URI"] = self_hosted_discovery_server_addr
+            os.environ["RMW_IMPLEMENTATION"] = "rmw_zenoh_cpp"
             discovery_server_task = loop.create_task(self.run_discovery_server(), name="Zenoh Router Monitor")
         else:
             discovery_server_task = None
