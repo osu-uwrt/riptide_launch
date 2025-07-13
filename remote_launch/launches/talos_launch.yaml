@@ -2,8 +2,11 @@ launches: [
   {
     package: "riptide_hardware2",
     file: "hardware.launch.py",
-    args: [
-      "robot:=talos"
+   args: [
+      "robot:=talos",
+      "imu_port:=/dev/ttyTHS1",
+      "imu_frame_id:=talos/imu_link",
+      "gyro_port:=/dev/ttyTHS2"
     ],
     topics: [
       "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
@@ -30,8 +33,7 @@ launches: [
     package: "riptide_controllers2",
     file: "control_system.launch.py",
     args: [
-      "robot:=talos",
-      "active_control_model:=complete"
+      "robot:=talos"
     ],
     topics: [
       "/talos/thruster_forces", "std_msgs/msg/Float32MultiArray", "0",
@@ -40,12 +42,25 @@ launches: [
     ]
   },
   {
+    package: "riptide_hardware2",
+    file: "zed.launch.py",
+    args: [
+      "robot:=talos",
+    ],
+    topics: [ 
+      "/talos/ffc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0",
+      "/talos/dfc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0"
+    ]
+  },
+  {
     package: "tensor_detector",
     file: "tensorrt.launch.py",
     args: [
       "robot:=talos"
     ],
-    topics: [ ]
+    topics: [ 
+      "/talos/yolo", "sensor_msgs/msg/Image", "0"
+    ]
   },
   {
     package: "riptide_mapping2",

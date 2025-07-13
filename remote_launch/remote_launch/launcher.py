@@ -31,7 +31,13 @@ self_hosted_discovery_server_cmd = os.environ["DISCOVERY_SERVER_CMD"] if "DISCOV
 self_hosted_discovery_server_addr = "localhost:11811"
 
 HTML_SERVER_ROOT = os.path.join(get_package_share_directory("remote_launch"), "pages")
-
+monitor_env = {
+    **os.environ,
+    "FASTRTPS_DEFAULT_PROFILES_FILE": "/home/ros/uwrt-config/dds/client.xml",
+    "RMW_FASTRTPS_USE_QOS_FROM_XML": "1",
+    # make sure it still finds your discovery server:
+    "ROS_DISCOVERY_SERVER": os.environ.get("ROS_DISCOVERY_SERVER", ""),
+}
 class SDNotify:
     # systemd notifier socket, so we can send signals to systemd to report our state properly
 

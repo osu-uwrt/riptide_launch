@@ -3,7 +3,10 @@ launches: [
     package: "riptide_hardware2",
     file: "hardware_fake_dvl.launch.py",
     args: [
-      "robot:=talos"
+      "robot:=talos",
+      "imu_port:=/dev/ttyTHS1",
+      "imu_frame_id:=talos/imu_link",
+      "gyro_port:=/dev/ttyTHS2"
     ],
     topics: [
       "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
@@ -37,6 +40,17 @@ launches: [
       "/talos/thruster_forces", "std_msgs/msg/Float32MultiArray", "0",
       "/talos/command/requested_rpm", "riptide_msgs2/msg/DshotCommand", "0",
       "/talos/controller/FF_body_force", "geometry_msgs/msg/Twist", "0",
+    ]
+  },
+  {
+    package: "riptide_hardware2",
+    file: "zed.launch.py",
+    args: [
+      "robot:=talos",
+    ],
+    topics: [ 
+      "/talos/ffc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0",
+      "/talos/dfc/zed_node/rgb/camera_info", "sensor_msgs/msg/CameraInfo", "0"
     ]
   },
   {
