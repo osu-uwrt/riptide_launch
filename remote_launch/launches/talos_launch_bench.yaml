@@ -18,6 +18,17 @@ launches: [
   },
   {
     package: "riptide_hardware2",
+    file: "copro_agent.launch.py",
+   args: [
+      "robot:=talos",
+    ],
+    topics: [
+      "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
+      "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
+    ]
+  },
+  {
+    package: "riptide_hardware2",
     file: "navigation.launch.py",
     args: [
       "robot:=talos"

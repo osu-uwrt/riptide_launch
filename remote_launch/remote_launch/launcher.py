@@ -32,7 +32,8 @@ self_hosted_discovery_server_addr = "tcp/localhost:7447"
 
 HTML_SERVER_ROOT = os.path.join(get_package_share_directory("remote_launch"), "pages")
 monitor_env = {
-    **os.environ,
+    **os.environ, 
+    # COMMENT THESE OUT FOR FASTDDS
     "RMW_IMPLEMENTATION": "rmw_zenoh_cpp",
     # make sure it still finds your discovery server:
     "ZENOH_ROUTER_CONFIG_URI": os.environ.get("ZENOH_ROUTER_CONFIG_URI", "tcp/localhost:7447"),

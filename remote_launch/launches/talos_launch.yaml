@@ -9,11 +9,20 @@ launches: [
       "gyro_port:=/dev/ttyTHS2"
     ],
     topics: [
-      "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
       "/talos/dvl/status", "nortek_dvl_msgs/msg/DvlStatus", "0",
       "/talos/vectornav/imu", "sensor_msgs/msg/Imu", "0",
-      "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
       "/talos/gyro/raw", "riptide_msgs2/msg/Int32Stamped", "0"
+    ]
+  },
+  {
+    package: "riptide_hardware2",
+    file: "copro_agent.launch.py",
+   args: [
+      "robot:=talos",
+    ],
+    topics: [
+      "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
+      "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
     ]
   },
   {
