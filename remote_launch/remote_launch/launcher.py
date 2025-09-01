@@ -25,18 +25,18 @@ SUPER_SECRET_MONITOR_FLAG = "--super-secret-monitoring-flag"
 
 log_format = "[%(name)s] %(message)s"
 log_level = logging.INFO
-serverPort = 8080
-self_hosted_discovery_server_cmd = os.environ["DISCOVERY_SERVER_CMD"] if "DISCOVERY_SERVER_CMD" in os.environ else \
-    "fastdds discovery -i 0"
-self_hosted_discovery_server_addr = "localhost:11811"
+serverPort = int(os.environ.get("SERVER_PORT", "8080"))
+self_hosted_discovery_server_cmd = os.environ.get("DISCOVERY_SERVER_CMD", 
+    "ros2 run rmw_zenoh_cpp rmw_zenohd --config=/home/ros/osu-uwrt/release/scripts/dds_scripts/zenoh/zenoh_router_test.json5")
+self_hosted_discovery_server_addr = "tcp/localhost:7447"
 
 HTML_SERVER_ROOT = os.path.join(get_package_share_directory("remote_launch"), "pages")
 monitor_env = {
-    **os.environ,
-    "FASTRTPS_DEFAULT_PROFILES_FILE": "/home/ros/uwrt-config/dds/client.xml",
-    "RMW_FASTRTPS_USE_QOS_FROM_XML": "1",
+    **os.environ, 
+    # COMMENT THESE OUT FOR FASTDDS
+    "RMW_IMPLEMENTATION": "rmw_zenoh_cpp",
     # make sure it still finds your discovery server:
-    "ROS_DISCOVERY_SERVER": os.environ.get("ROS_DISCOVERY_SERVER", ""),
+    "ZENOH_ROUTER_CONFIG_URI": os.environ.get("ZENOH_ROUTER_CONFIG_URI", "tcp/localhost:7447"),
 }
 class SDNotify:
     # systemd notifier socket, so we can send signals to systemd to report our state properly
@@ -413,14 +413,14 @@ class LaunchData:
         # session so it's isolated from Control+C on the terminal
         self._launch_subproc = await asyncio.create_subprocess_exec(*popen_args, stdout=asyncio.subprocess.PIPE,
                                                                     stderr=asyncio.subprocess.STDOUT,
-                                                                    start_new_session=True)
+                                                                    start_new_session=True, env=monitor_env)
 
         # pipe stdout to this process to receive topic notifications, and in new session to isolate Control+C
         if len(self.monitored_topics) > 0:
             popen_args = ["/proc/self/exe", __file__, SUPER_SECRET_MONITOR_FLAG]
             popen_args.extend(self._gen_monitor_cmd_args())
             self._monitor_subproc = await asyncio.create_subprocess_exec(*popen_args, stdout=asyncio.subprocess.PIPE,
-                                                                         start_new_session=True)
+                                                                         start_new_session=True, env=monitor_env)
         else:
             self._monitor_subproc = None
 
@@ -690,13 +690,13 @@ class LaunchServer:
         launch_entries = os.listdir(os.path.join(pack_path, "launches"))
         self.launch_files = [x for x in launch_entries if x.endswith('.yaml') or x.endswith('.yml')]
 
-        # Determine how the fastdds discovery server is configured
-        self.discovery_server_pid = 0  # Holds PID of discovery server if running for systemd orphan tracking
+        # Determine how the zenoh router is configured
+        self.discovery_server_pid = 0  # Holds PID of zenoh router if running for systemd orphan tracking
         if start_discovery_server:
             self.discovery_status = "Self Hosted (OK)"
             self.discovery_status_color = "green"
-        elif "ROS_DISCOVERY_SERVER" in os.environ:
-            self.discovery_status = f"External ({os.environ['ROS_DISCOVERY_SERVER']})"
+        elif "ZENOH_ROUTER_CONFIG_URI" in os.environ:
+            self.discovery_status = f"External ({os.environ['ZENOH_ROUTER_CONFIG_URI']})"
             self.discovery_status_color = "green"
         else:
             self.discovery_status = "None (Falling back to Dynamic Discovery)"
@@ -750,8 +750,19 @@ class LaunchServer:
 
     async def run_discovery_server(self):
         try:
-            self.logger.info("Starting Discovery Server")
-            proc = await asyncio.create_subprocess_shell(self_hosted_discovery_server_cmd, start_new_session=True)
+            # First, try to kill any existing zenoh routers on the same port to avoid conflicts
+            try:
+                import subprocess
+                subprocess.run(["pkill", "-f", "rmw_zenohd"], check=False, capture_output=True)
+                await asyncio.sleep(1)  # Give time for cleanup
+            except:
+                pass
+            
+            self.logger.info(f"Starting Zenoh Router with command: {self_hosted_discovery_server_cmd}")
+            proc = await asyncio.create_subprocess_shell(self_hosted_discovery_server_cmd, 
+                                                       start_new_session=True,
+                                                       stdout=asyncio.subprocess.PIPE,
+                                                       stderr=asyncio.subprocess.PIPE)
             self.discovery_server_pid = proc.pid
 
             while not self.stop.is_set():
@@ -760,20 +771,27 @@ class LaunchServer:
                 with contextlib.suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(proc.wait(), 0.05)
                 if proc.returncode is not None:
+                    # Get stdout and stderr to help debug
+                    stdout, stderr = await proc.communicate()
+                    
                     # Send crash event to all the clients
                     self.discovery_status = "Self Hosted (CRASHED!)"
                     self.discovery_status_color = "red"
                     self.broadcast_refresh_event.set()
-                    self.logger.critical(f"Discovery Server Died! (Exit Code: {proc.returncode})")
+                    self.logger.critical(f"Zenoh Router Died! (Exit Code: {proc.returncode})")
+                    if stdout:
+                        self.logger.error(f"Zenoh Router stdout: {stdout.decode()}")
+                    if stderr:
+                        self.logger.error(f"Zenoh Router stderr: {stderr.decode()}")
                     # Give half a second for the failure message to go out
                     await asyncio.sleep(0.5)
 
                     # Raise an exception (which will set the stop flag)
-                    raise RuntimeError(f"Discovery Server Died (Exit Code: {proc.returncode})")
+                    raise RuntimeError(f"Zenoh Router Died (Exit Code: {proc.returncode})")
                 # Rate limit polling to once per second
                 await event_wait(self.stop, 1.0)
 
-            # Send interrupt and wait for discovery server to stop
+            # Send interrupt and wait for zenoh router to stop
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGINT)
             except:
@@ -781,7 +799,7 @@ class LaunchServer:
             await proc.wait()
         finally:
             # Set stop if we ever return so we quickly see the exception
-            # This should never crash (unless the discovery server itself crashes)
+            # This should never crash (unless the zenoh router itself crashes)
             self.stop.set()
 
     def report_systemd_status(self):
@@ -1065,8 +1083,8 @@ class LaunchServer:
         signal.signal(signal.SIGINT, self._keyboard_int_handler)
 
         if self.start_discovery_server:
-            os.environ["ROS_DISCOVERY_SERVER"] = self_hosted_discovery_server_addr
-            discovery_server_task = loop.create_task(self.run_discovery_server(), name="Discovery Server Monitor")
+            os.environ["RMW_IMPLEMENTATION"] = "rmw_zenoh_cpp"
+            discovery_server_task = loop.create_task(self.run_discovery_server(), name="Zenoh Router Monitor")
         else:
             discovery_server_task = None
 
@@ -1092,7 +1110,7 @@ class LaunchServer:
                 broadcast_task.cancel()
             await self.cleanup_launches()
 
-            # Wait for discovery server to shut down (and will bubble any exceptions up)
+            # Wait for zenoh router to shut down (and will bubble any exceptions up)
             if discovery_server_task is not None:
                 await discovery_server_task
 

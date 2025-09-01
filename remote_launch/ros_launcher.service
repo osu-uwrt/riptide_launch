@@ -19,8 +19,7 @@ StartLimitBurst=5
 
 [Service]
 # Command to launch the service
-ExecStart=/bin/bash -c 'source /home/ros/colcon_deploy/install/setup.bash; python3 /home/ros/colcon_deploy/install/remote_launch/lib/remote_launch/launcher --systemd --start-discovery-server'
-Environment="DISCOVERY_SERVER_CMD=/home/ros/robert_stuff/fast-discovery-server -i 0"
+ExecStart=/bin/bash -c 'source /home/ros/colcon_deploy/install/setup.bash; source /home/ros/uwrt_config/source/zenoh_server.bash; python3 /home/ros/colcon_deploy/install/remote_launch/lib/remote_launch/launcher --systemd --start-discovery-server'
 WorkingDirectory=/home/ros
 User=ros
 Group=ros
