@@ -70,7 +70,7 @@ launches: [
       "robot:=talos"
     ],
     topics: [ 
-      "/talos/yolo", "sensor_msgs/msg/Image", "0"
+      "/talos/yolo_orientation/annotated/compressed", "sensor_msgs/msg/CompressedImage", "0"
     ]
   },
   {
@@ -84,6 +84,14 @@ launches: [
   {
     package: "riptide_autonomy2",
     file: "autonomy.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
+  },
+  {
+    package: "riptide_hardware2",
+    file: "diagnostics.launch.py",
     args: [
       "robot:=talos"
     ],
