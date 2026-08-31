@@ -31,7 +31,9 @@ launches: [
     args: [
       "robot:=talos"
     ],
-    topics: [ ]
+    topics: [ 
+      "/talos/yolo_orientation/annotated/compressed", "sensor_msgs/msg/CompressedImage", "0"
+    ]
   },
   {
     package: "riptide_mapping2",

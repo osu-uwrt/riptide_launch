@@ -754,6 +754,7 @@ class LaunchServer:
             try:
                 import subprocess
                 subprocess.run(["pkill", "-f", "rmw_zenohd"], check=False, capture_output=True)
+                subprocess.run(["ros2", "daemon", "stop"], check=False, capture_output=True)
                 await asyncio.sleep(1)  # Give time for cleanup
             except:
                 pass

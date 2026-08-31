@@ -16,17 +16,17 @@ launches: [
       "/talos/gyro/raw", "riptide_msgs2/msg/Int32Stamped", "0",
     ]
   },
-  {
-    package: "riptide_hardware2",
-    file: "copro_agent.launch.py",
-   args: [
-      "robot:=talos",
-    ],
-    topics: [
-      "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
-      "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
-    ]
-  },
+  # {
+  #   package: "riptide_hardware2",
+  #   file: "copro_agent.launch.py",
+  #  args: [
+  #     "robot:=talos",
+  #   ],
+  #   topics: [
+  #     "/talos/state/firmware", "riptide_msgs2/msg/FirmwareStatus", "0",
+  #     "/talos/state/depth/raw", "riptide_msgs2/msg/Depth", "0",
+  #   ]
+  # },
   {
     package: "riptide_hardware2",
     file: "navigation.launch.py",
@@ -70,7 +70,9 @@ launches: [
     args: [
       "robot:=talos"
     ],
-    topics: [ ]
+    topics: [ 
+      "/talos/yolo_orientation/annotated/compressed", "sensor_msgs/msg/CompressedImage", "0"
+    ]
   },
   {
     package: "riptide_mapping2",
@@ -83,6 +85,14 @@ launches: [
   {
     package: "riptide_autonomy2",
     file: "autonomy.launch.py",
+    args: [
+      "robot:=talos"
+    ],
+    topics: [ ]
+  },
+  {
+    package: "riptide_hardware2",
+    file: "diagnostics.launch.py",
     args: [
       "robot:=talos"
     ],
