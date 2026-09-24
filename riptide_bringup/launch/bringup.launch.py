@@ -41,6 +41,12 @@ def determine_launch_files(context, *args, **kwargs):
         )
     else:
         print("Launching with NO hardware")
+        add_launch_file (
+                    os.path.join(
+                        get_package_share_directory('riptide_acoustics'),
+                        'launch',
+                        'acoustics.launch.py')
+                )
     
     add_launch_file (
         os.path.join(
