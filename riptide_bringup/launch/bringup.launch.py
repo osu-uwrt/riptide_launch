@@ -73,8 +73,8 @@ def determine_launch_files(context, *args, **kwargs):
     add_launch_file (
         os.path.join(
             get_package_share_directory('riptide_mapping2'),
-            'launch',
-            'mapping.launch.py'),
+            'launch', 'mapping.launch.py'),
+        [('config_yaml', LC('mapping_config_yaml'))],
     )
     
     add_launch_file (
@@ -128,6 +128,13 @@ def generate_launch_description():
             'hardware',
             default_value='real',
             description='Hardware implementation to use. Options are \"real\", \"fake\", or \"none\".'
+        ),
+        DeclareLaunchArgument(
+            'mapping_config_yaml',
+            default_value=os.path.join(
+                get_package_share_directory('riptide_mapping2'),
+                'config', 'config.yaml'),
+            description='Full path to the mapping configuration file.'
         ),
 
         DeclareLaunchArgument(

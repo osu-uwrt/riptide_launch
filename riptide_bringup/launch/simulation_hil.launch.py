@@ -1,16 +1,17 @@
 import os
 from launch.launch_description import LaunchDescription
 from launch.substitutions import LaunchConfiguration as LC
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from riptide_sim_config.launching import arguments
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from ament_index_python import get_package_share_directory
 
-DEFAULT_ROBOT_NAME = "tempest"
+DEFAULT_ROBOT_NAME = "talos"
 DEFAULT_ACTIVE_CONTROL_MODEL = "hybrid"
 
 
 def generate_launch_description():
-    return LaunchDescription([
+    return LaunchDescription(arguments() + [
         DeclareLaunchArgument(
             "robot", 
             default_value=DEFAULT_ROBOT_NAME, 
@@ -35,10 +36,11 @@ def generate_launch_description():
             ),
             
             launch_arguments=[
-                ('hardware', 'none'),
-                ('with_zed_faker', 'True'),
+                ('with_camera_faker', 'True'),
                 ('with_bringup', 'False'),
                 ('robot', LC('robot')),
+                ('year', LC('year')), ('scenario', LC('scenario')),
+                ('resolved_config', LC('resolved_config')),
                 ('active_control_enabled', LC('active_control_enabled')),
                 ('active_control_model', LC('active_control_model'))
             ]
