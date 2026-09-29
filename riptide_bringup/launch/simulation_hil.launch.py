@@ -8,6 +8,7 @@ from ament_index_python import get_package_share_directory
 
 DEFAULT_ROBOT_NAME = "talos"
 DEFAULT_ACTIVE_CONTROL_MODEL = "hybrid"
+DEFAULT_HIL_CAMERA_SCALE = "0.5"
 
 
 def generate_launch_description():
@@ -29,7 +30,16 @@ def generate_launch_description():
             default_value="True",
             description="Whether or not the active control should be launched with the system."
         ),
-        
+
+        # Raw sim images cross the network to the robot's zenoh router in HIL.
+        # Full-res 32FC1 depth (~9 MB/frame) saturates gigabit, so raw topics
+        # never arrive. Scales cameras.yaml resolution_scale; normal sim is unaffected.
+        DeclareLaunchArgument(
+            'camera_scale',
+            default_value=DEFAULT_HIL_CAMERA_SCALE,
+            description="Sim camera resolution multiplier for HIL (1.0 = native ZED resolution)."
+        ),
+
         IncludeLaunchDescription(
             AnyLaunchDescriptionSource(
                 os.path.join(get_package_share_directory("riptide_bringup2"), "launch", "simulation.launch.py")
@@ -42,7 +52,8 @@ def generate_launch_description():
                 ('year', LC('year')), ('scenario', LC('scenario')),
                 ('resolved_config', LC('resolved_config')),
                 ('active_control_enabled', LC('active_control_enabled')),
-                ('active_control_model', LC('active_control_model'))
+                ('active_control_model', LC('active_control_model')),
+                ('camera_scale', LC('camera_scale'))
             ]
         )
     ])
