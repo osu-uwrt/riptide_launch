@@ -41,6 +41,21 @@ launches: [
     ]
   },
   {
+    package: "riptide_navigation",
+    file: "navigation.launch.py",
+    args: [
+      "robot:=talos",
+      "mode:=replacement"
+    ],
+    topics: [
+      "/talos/joint_states", "sensor_msgs/msg/JointState", "0",
+      "/talos/odometry/filtered", "nav_msgs/msg/Odometry", "0",
+      "/talos/depth/pose", "geometry_msgs/msg/PoseWithCovarianceStamped", "0",
+      "/tf", "tf2_msgs/msg/TFMessage", "0",
+      "/a", "std_msgs/msg/Float64", "0"
+    ]
+  },
+  {
     package: "riptide_controllers2",
     file: "control_system.launch.py",
     args: [
