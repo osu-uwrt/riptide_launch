@@ -322,7 +322,6 @@ class LaunchData:
         self.file: str = launch["file"]
         self.log_key = f"{self.package}/{self.file}"  # Unlike id, this stays the same when the launch file is reloaded
         self.state = LaunchState.STOPPED
-        self.run_start_time = None  # Tells apart the log lines of each time this launch is started
         self.is_zombie = False
         self.monitored_topics: 'list[LaunchData.LaunchTopic]' = []
         if len(launch["topics"]) % 3 != 0:
@@ -395,7 +394,6 @@ class LaunchData:
                 "time": time.time(),
                 "name": self.friendly_name,
                 "key": self.log_key,
-                "run": self.run_start_time,
                 "state": state,
                 "data": line.rstrip('\n')
             }
@@ -610,7 +608,6 @@ class LaunchData:
                 self._launch_task_inst.result()
 
         self.state = LaunchState.STARTING
-        self.run_start_time = time.time()
         self._launch_task_inst = asyncio.create_task(self._launch_task(), name=self.id + "_launch_task")
 
     def term_launch(self):

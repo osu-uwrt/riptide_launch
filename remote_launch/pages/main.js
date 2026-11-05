@@ -217,12 +217,6 @@ function addLaunchEntry(launchId, friendlyName, logKey) {
   entryTitle.classList.add("title-box");
   entryTitle.innerText = friendlyName;
   entryTitleCell.appendChild(entryTitle);
-  entryTitleCell.appendChild(document.createTextNode(" "));
-  var errorCount = document.createElement("span");
-  errorCount.classList.add("launch-error-count");
-  errorCount.dataset.logKey = logKey;
-  showLaunchErrorCount(errorCount);
-  entryTitleCell.appendChild(errorCount);
   entryRoot.appendChild(entryTitleCell);
 
   var entryButtons = document.createElement("td");
@@ -528,7 +522,7 @@ var logLines = [];          // Every line we hold, oldest first
 var logShown = [];          // The lines that pass the filters, which is what the terminal holds
 var logMatches = [];        // Indices in logShown of the lines matching the search
 var logMatchPos = -1;       // Which of logMatches is selected
-var logSources = new Map(); // Filter key -> {label, current, errors}, current means it has a Log checkbox
+var logSources = new Map(); // Filter key -> {label, current}, current means it has a Log checkbox
 var logFilter = {};         // Filter key -> shown, for the sources that were changed from the default
 var logSearchRe = null;
 var logCountsQueued = false;
@@ -573,7 +567,7 @@ function syncLogSources(launches) {
     var label = nameCounts[entry.friendly_name] > 1 ? entry.package + "/" + entry.friendly_name : entry.friendly_name;
     var source = logSources.get(entry.log_key);
     if (source == null) {
-      logSources.set(entry.log_key, {label: label, current: true, errors: 0});
+      logSources.set(entry.log_key, {label: label, current: true});
     } else {
       source.label = label;
     }
@@ -595,12 +589,6 @@ function updateLogCheckboxes() {
   });
 }
 
-function showLaunchErrorCount(element) {
-  var errors = logSources.get(element.dataset.logKey).errors;
-  element.innerText = errors > 0 ? errors : "";
-  element.title = errors + (errors == 1 ? " error in the log" : " errors in the log");
-}
-
 function addLogLine(line) {
   line.key = line.key != null ? line.key : LOG_LAUNCHER_KEY;
   line.plain = line.data.replace(ansiRe, "");
@@ -615,24 +603,7 @@ function addLogLine(line) {
   }
 
   if (!logSources.has(line.key)) {
-    logSources.set(line.key, {label: line.name, current: false, errors: 0});
-  }
-  // Counts are per run, and nodes dying while we stop them isn't a problem (ros2 launch logs that as an error)
-  var source = logSources.get(line.key);
-  var newRun = source.run !== line.run;
-  source.run = line.run;
-  if (newRun) {
-    source.errors = 0;
-  }
-  if (line.level == LEVEL_ERROR && line.state != "stopping") {
-    source.errors += 1;
-  }
-  if (newRun || line.level == LEVEL_ERROR) {
-    document.querySelectorAll(".launch-error-count").forEach(function (element) {
-      if (element.dataset.logKey == line.key) {
-        showLaunchErrorCount(element);
-      }
-    });
+    logSources.set(line.key, {label: line.name, current: false});
   }
   logLines.push(line);
 }

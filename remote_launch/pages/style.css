@@ -91,12 +91,6 @@ tr:nth-child(even) {
   color: #222;
 }
 
-.launch-error-count {
-  color: #a82d00;
-  font-weight: bold;
-  margin-left: 0.25em;
-}
-
 .launchdetails-contents {
   padding: 0.75em;
   background-color: #ccc;
