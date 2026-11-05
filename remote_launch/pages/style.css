@@ -91,6 +91,12 @@ tr:nth-child(even) {
   color: #222;
 }
 
+.launch-error-count {
+  color: #a82d00;
+  font-weight: bold;
+  margin-left: 0.25em;
+}
+
 .launchdetails-contents {
   padding: 0.75em;
   background-color: #ccc;
@@ -232,6 +238,8 @@ ul.zombie-list {
 
 .terminal-container {
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   height: 40%;         /* Initial terminal height */
   min-height: 150px;
@@ -255,9 +263,67 @@ ul.zombie-list {
   background: #222;
   color: #fff;
   padding: 10px;
-  height: calc(100% - 10px); /* Adjust height to account for the resizer */
+  flex: 1;
+  min-height: 0;
   position: relative;
   align-content: end;
+}
+
+.log-controls {
+  align-items: center;
+  background-color: #555;
+  color: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 12px 50px 7px 10px; /* Top clears the resizer, right clears the close button */
+}
+
+.log-title {
+  font-weight: bold;
+}
+
+.log-launch-buttons {
+  white-space: nowrap;
+}
+
+#log-search {
+  flex: 0 1 220px;
+  min-width: 100px;
+}
+
+#log-search.log-search-invalid {
+  outline: 2px solid #ff4500;
+}
+
+#log-match-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#log-line-count {
+  color: #ddd;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .log-title, #log-line-count {
+    display: none;
+  }
+
+  #log-search {
+    flex: 1 1 100px;
+  }
+
+  .log-controls button, .log-controls select, .log-controls input[type="search"] {
+    min-height: 32px;
+  }
+
+  .log-controls {
+    font-size: 14px;
+  }
 }
 
 .termclose-btn {

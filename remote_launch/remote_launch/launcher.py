@@ -1,5 +1,6 @@
 # Python 3 server example
 import asyncio
+import collections
 import contextlib
 import enum
 import http
@@ -26,6 +27,7 @@ SUPER_SECRET_MONITOR_FLAG = "--super-secret-monitoring-flag"
 log_format = "[%(name)s] %(message)s"
 log_level = logging.INFO
 serverPort = int(os.environ.get("SERVER_PORT", "8080"))
+log_history_lines = 20000  # Log lines kept so clients can see what happened before they connected
 self_hosted_discovery_server_cmd = os.environ.get("DISCOVERY_SERVER_CMD", 
     "ros2 run rmw_zenoh_cpp rmw_zenohd --config=/home/ros/osu-uwrt/release/scripts/dds_scripts/zenoh/zenoh_router_test.json5")
 self_hosted_discovery_server_addr = "tcp/localhost:7447"
@@ -305,8 +307,10 @@ class LaunchData:
 
             self.seen = False
 
-    def __init__(self, launch: dict, parent_logger: 'logging.Logger', broadcast_refresh_event: 'asyncio.Event'):
+    def __init__(self, launch: dict, parent_logger: 'logging.Logger', broadcast_refresh_event: 'asyncio.Event',
+                 log_history: 'collections.deque'):
         self.output_websockets = set()
+        self._log_history = log_history
 
         # Launch Information (decoded from JSON)
         self.id = str(uuid.uuid4())
@@ -316,7 +320,9 @@ class LaunchData:
             self.friendly_name: str = launch["file"]
         self.package: str = launch["package"]
         self.file: str = launch["file"]
+        self.log_key = f"{self.package}/{self.file}"  # Unlike id, this stays the same when the launch file is reloaded
         self.state = LaunchState.STOPPED
+        self.run_start_time = None  # Tells apart the log lines of each time this launch is started
         self.is_zombie = False
         self.monitored_topics: 'list[LaunchData.LaunchTopic]' = []
         if len(launch["topics"]) % 3 != 0:
@@ -369,29 +375,32 @@ class LaunchData:
             if len(line) == 0:
                 # We reached EOF, just wait for launch to terminate
                 break
+            state = self.state
+            if state == LaunchState.RUNNING:
+                # Fix up state for starting/running so we can see the difference between launch starting/running
+                if self._monitor_subproc is not None:
+                    all_topics_seen = True
+                    for topic in self.monitored_topics:
+                        if not topic.seen:
+                            all_topics_seen = False
+                            break
+                else:
+                    all_topics_seen = True
+
+                if not all_topics_seen:
+                    state = LaunchState.STARTING
+
+            log_obj = {
+                "type": "log",
+                "time": time.time(),
+                "name": self.friendly_name,
+                "key": self.log_key,
+                "run": self.run_start_time,
+                "state": state,
+                "data": line.rstrip('\n')
+            }
+            self._log_history.append(log_obj)
             if len(self.output_websockets):
-                state = self.state
-                if state == LaunchState.RUNNING:
-                    # Fix up state for starting/running so we can see the difference between launch starting/running
-                    if self._monitor_subproc is not None:
-                        all_topics_seen = True
-                        for topic in self.monitored_topics:
-                            if not topic.seen:
-                                all_topics_seen = False
-                                break
-                    else:
-                        all_topics_seen = True
-
-                    if not all_topics_seen:
-                        state = LaunchState.STARTING
-
-                log_obj = {
-                    "type": "log",
-                    "time": time.time(),
-                    "name": self.friendly_name,
-                    "state": state,
-                    "data": line.rstrip('\n')
-                }
                 websockets.broadcast(self.output_websockets, json.dumps(log_obj, default=json_encode_default))
 
         await self._launch_subproc.wait()
@@ -601,6 +610,7 @@ class LaunchData:
                 self._launch_task_inst.result()
 
         self.state = LaunchState.STARTING
+        self.run_start_time = time.time()
         self._launch_task_inst = asyncio.create_task(self._launch_task(), name=self.id + "_launch_task")
 
     def term_launch(self):
@@ -618,6 +628,7 @@ def json_encode_default(o):
             "friendly_name": o.friendly_name,
             "package": o.package,
             "file": o.file,
+            "log_key": o.log_key,
             "state": o.state,
             "monitored_topics": o.monitored_topics,
             "args": o.args,
@@ -653,22 +664,25 @@ async def event_wait(evt, timeout):
 
 class LaunchServer:
     class WebsocketHandler(logging.Handler):
-        def __init__(self, connections: set)-> None:
+        def __init__(self, connections: set, log_history: 'collections.deque')-> None:
             self._connections_weak = weakref.ref(connections)
+            self._log_history = log_history
             logging.Handler.__init__(self=self)
 
         def emit(self, record) -> None:
-            connections = self._connections_weak()
-            if connections is None or len(connections) == 0:
-                return
-
             log_obj = {
                 "type": "log",
                 "time": time.time(),
                 "name": record.name,
+                "key": None,
                 "state": "global" if record.levelno < logging.ERROR else "global_error",
                 "data": record.getMessage()
             }
+            self._log_history.append(log_obj)
+
+            connections = self._connections_weak()
+            if connections is None or len(connections) == 0:
+                return
             websockets.broadcast(connections, json.dumps(log_obj, default=json_encode_default))
 
     def __init__(self, systemd_mode: bool, start_discovery_server: bool) -> None:
@@ -679,11 +693,12 @@ class LaunchServer:
         self.start_discovery_server = start_discovery_server
         self.connections = set()
         self.default_log_connections = set()  # List of all connections to enable logs for a launch by default
+        self.log_history = collections.deque(maxlen=log_history_lines)  # Output of all launches, oldest first
 
         # Logging Config
         self.logger = logging.getLogger("remote_launch")
         self.logger.setLevel(log_level)
-        self.logger.addHandler(self.WebsocketHandler(self.connections))
+        self.logger.addHandler(self.WebsocketHandler(self.connections, self.log_history))
 
         # Load all launch entries
         pack_path = get_package_share_directory("remote_launch")
@@ -739,7 +754,7 @@ class LaunchServer:
         with open(file_path, 'r') as file:
             launch_data = yaml.safe_load(file)["launches"]
             for launch in launch_data:
-                self.launches.append(LaunchData(launch, self.logger, self.broadcast_refresh_event))
+                self.launches.append(LaunchData(launch, self.logger, self.broadcast_refresh_event, self.log_history))
                 self.launches[-1].output_websockets = self.default_log_connections.copy()
 
     def _cleanup_dead_zombies(self):
@@ -997,13 +1012,14 @@ class LaunchServer:
             "default": websocket in self.default_log_connections
         }
 
-    def get_first_connect_resp(self, websocket) -> dict:
+    def get_first_connect_resp(self, websocket, send_log_history: bool) -> dict:
         return {
             "type": "first_connect",
             "launch_files": self.launch_files,
             "systemd_mode": self.systemd_mode,
             "status": self.server_status,
-            "log_enrollment": self.get_logging_enrollment(websocket)
+            "log_enrollment": self.get_logging_enrollment(websocket),
+            "log_history": list(self.log_history) if send_log_history else []
         }
 
 
@@ -1054,8 +1070,10 @@ class LaunchServer:
         except:
             # Silence any incomplete read errors
             return
-        self.handle_ws_connect_msg(json.loads(message), websocket)
-        await websocket.send(json.dumps(self.get_first_connect_resp(websocket), default=json_encode_default))
+        request = json.loads(message)
+        self.handle_ws_connect_msg(request, websocket)
+        first_connect_resp = self.get_first_connect_resp(websocket, request.get("log_history", False))
+        await websocket.send(json.dumps(first_connect_resp, default=json_encode_default))
 
         # Then put socket into standard running mode
         self.connections.add(websocket)

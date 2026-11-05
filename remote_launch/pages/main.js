@@ -5,7 +5,9 @@ var errorShown = false;     // Used so that when we close the websocket, the clo
 var baseTheme = {
   foreground: '#F8F8F8',
   background: '#222',
-  selection: '#5DA5D533',
+  selectionBackground: '#8A6500',
+  selectionInactiveBackground: '#8A6500',
+  selectionForeground: '#FFFFFF',
   black: '#1E1E1D',
   brightBlack: '#262625',
   red: '#CE5C5C',
@@ -28,14 +30,15 @@ var logLevelColorMap = {
   running: "\x1B[1;32m",
   stopping: "\x1B[1;38:5:208m",
   global: "\x1B[1;35m",
-  global_error: "\x1B[1;31m"
+  global_error: "\x1B[1;31m",
+  notice: "\x1B[1;33m"
 }
 const term = new Terminal({
   fontFamily: '"Cascadia Code", Menlo, monospace',
   theme: baseTheme,
   disableStdin: true,
   convertEol: true,
-  scrollback: 10000
+  scrollback: 100000
 });
 const fitAddon = new FitAddon.FitAddon();
 term.loadAddon(fitAddon);
@@ -196,7 +199,7 @@ function toggleDetailsVisibility(launchId) {
   }
 }
 
-function addLaunchEntry(launchId, friendlyName) {
+function addLaunchEntry(launchId, friendlyName, logKey) {
   var progressTable = document.getElementById("bringup_table");
 
   var entryRoot = document.createElement("tr");
@@ -214,6 +217,12 @@ function addLaunchEntry(launchId, friendlyName) {
   entryTitle.classList.add("title-box");
   entryTitle.innerText = friendlyName;
   entryTitleCell.appendChild(entryTitle);
+  entryTitleCell.appendChild(document.createTextNode(" "));
+  var errorCount = document.createElement("span");
+  errorCount.classList.add("launch-error-count");
+  errorCount.dataset.logKey = logKey;
+  showLaunchErrorCount(errorCount);
+  entryTitleCell.appendChild(errorCount);
   entryRoot.appendChild(entryTitleCell);
 
   var entryButtons = document.createElement("td");
@@ -245,11 +254,11 @@ function addLaunchEntry(launchId, friendlyName) {
   logLabel.classList.add("log-checkbox-label");
   var logCheckbox = document.createElement("input");
   logCheckbox.type = "checkbox";
-  logCheckbox.checked = JSON.parse(localStorage.logging_enable_default);
-  logCheckbox.id = "launchentry-" + launchId + "-log-en";
+  logCheckbox.checked = isLogSourceShown(logKey);
+  logCheckbox.dataset.logKey = logKey;
   logCheckbox.classList.add("log-checkbox-input");
   logCheckbox.onchange = function () {
-    logCheckboxChanged(launchId);
+    setLogSourcesShown([logKey], logCheckbox.checked);
   };
   logLabel.appendChild(logCheckbox);
   logLabel.appendChild(document.createTextNode("Log"));
@@ -417,6 +426,8 @@ function statusCallback(resp) {
     }
   }
 
+  syncLogSources(resp.launches);
+
   // Update all launches that we are provided in status
   for (var i = 0; i < resp.launches.length; i++) {
     var entry = resp.launches[i];
@@ -427,7 +438,7 @@ function statusCallback(resp) {
     var existingIdx = id_list.indexOf("launchentry-" + entry["id"]);
 
     if (existingIdx < 0) {
-      addLaunchEntry(entry.id, entry.friendly_name);
+      addLaunchEntry(entry.id, entry.friendly_name, entry.log_key);
     } else {
       id_list.splice(existingIdx, 1);
       id_list.splice(id_list.indexOf("launchdetails-" + entry["id"]), 1);
@@ -491,30 +502,337 @@ function firstConnectCallback(resp) {
   }
   document.getElementById("shutDownCleanBtn").disabled = false;
 
+  document.getElementById('log-default-checkbox').disabled = false;
+
   // Handle the bundled status message
   statusCallback(resp.status);
 
-  // Now that we've refreshed all the launches, update the log enrollment status
-  logEnrollmentCallback(resp.log_enrollment);
+  // Show everything that was logged before we connected
+  resp.log_history.forEach(addLogLine);
+  rebuildLog();
 }
 
-function logEnrollmentCallback(resp) {
-  // Update the checkboxes with the reported log enrollment from the server
-  // Set default value
-  var defaultCheckbox = document.getElementById('log-default-checkbox');
-  defaultCheckbox.checked = resp.default;
-  defaultCheckbox.disabled = false;
+// ========================================
+// Launch Log
+// ========================================
 
-  // Save in local storage as well
-  localStorage.logging_enable_default = JSON.stringify(resp.default);
+const LOG_MAX_LINES = 30000;            // Oldest lines are dropped past this, must fit in the terminal scrollback
+const LOG_LAUNCHER_KEY = "launcher";    // Filter key for lines from the launcher itself
+const LEVEL_NORMAL = 0, LEVEL_WARN = 1, LEVEL_ERROR = 2;
+const LEVEL_COLORS = {[LEVEL_WARN]: "\x1B[33m", [LEVEL_ERROR]: "\x1B[31m"};
+const SEARCH_HIGHLIGHT = "\x1B[30;43m";
+const ansiRe = /\x1B\[[0-9;:?]*[ -\/]*[@-~]/g;
+const rosLevelRe = /\[(DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\]/;
 
-  for (var launchId in resp.launches) {
-    var checkbox = document.getElementById(`launchentry-${launchId}-log-en`);
-    if (checkbox != null) {
-      checkbox.checked = resp.launches[launchId];
-      checkbox.disabled = false;
+var logLines = [];          // Every line we hold, oldest first
+var logShown = [];          // The lines that pass the filters, which is what the terminal holds
+var logMatches = [];        // Indices in logShown of the lines matching the search
+var logMatchPos = -1;       // Which of logMatches is selected
+var logSources = new Map(); // Filter key -> {label, current, errors}, current means it has a Log checkbox
+var logFilter = {};         // Filter key -> shown, for the sources that were changed from the default
+var logSearchRe = null;
+var logCountsQueued = false;
+
+function isLogSourceShown(key) {
+  // Filtering is done with the launch's Log checkbox, so anything without one can't be left hidden
+  var source = logSources.get(key);
+  if (source == null || !source.current) {
+    return true;
+  }
+  if (key in logFilter) {
+    return logFilter[key];
+  }
+  return JSON.parse(localStorage.logging_enable_default);
+}
+
+function setLogSourcesShown(keys, shown) {
+  keys.forEach(function (key) { logFilter[key] = shown; });
+  localStorage.log_filter = JSON.stringify(logFilter);
+  updateLogCheckboxes();
+  rebuildLog();
+}
+
+function syncLogSources(launches) {
+  var active = launches.filter(function (entry) { return !entry.is_zombie; });
+  var nameCounts = {};
+  active.forEach(function (entry) {
+    nameCounts[entry.friendly_name] = (nameCounts[entry.friendly_name] || 0) + 1;
+  });
+
+  var currentKeys = active.map(function (entry) { return entry.log_key; });
+  var changed = false;
+  logSources.forEach(function (source, key) {
+    if (source.current != currentKeys.includes(key)) {
+      source.current = !source.current;
+      changed = true;
+    }
+  });
+
+  active.forEach(function (entry) {
+    // Some launch files use the same launch file name from two packages
+    var label = nameCounts[entry.friendly_name] > 1 ? entry.package + "/" + entry.friendly_name : entry.friendly_name;
+    var source = logSources.get(entry.log_key);
+    if (source == null) {
+      logSources.set(entry.log_key, {label: label, current: true, errors: 0});
+    } else {
+      source.label = label;
+    }
+  });
+
+  if (changed) {
+    rebuildLog();  // Whether a line can be filtered depends on the launch still having a checkbox
+  }
+}
+
+function setAllLogSourcesShown(shown) {
+  var keys = Array.from(logSources.keys()).filter(function (key) { return logSources.get(key).current; });
+  setLogSourcesShown(keys, shown);
+}
+
+function updateLogCheckboxes() {
+  document.querySelectorAll(".log-checkbox-input").forEach(function (checkbox) {
+    checkbox.checked = isLogSourceShown(checkbox.dataset.logKey);
+  });
+}
+
+function showLaunchErrorCount(element) {
+  var errors = logSources.get(element.dataset.logKey).errors;
+  element.innerText = errors > 0 ? errors : "";
+  element.title = errors + (errors == 1 ? " error in the log" : " errors in the log");
+}
+
+function addLogLine(line) {
+  line.key = line.key != null ? line.key : LOG_LAUNCHER_KEY;
+  line.plain = line.data.replace(ansiRe, "");
+
+  var rosLevel = line.plain.match(rosLevelRe);
+  if (line.state == "global_error" || (rosLevel != null && ["ERROR", "FATAL"].includes(rosLevel[1]))) {
+    line.level = LEVEL_ERROR;
+  } else if (rosLevel != null && rosLevel[1].startsWith("WARN")) {
+    line.level = LEVEL_WARN;
+  } else {
+    line.level = LEVEL_NORMAL;
+  }
+
+  if (!logSources.has(line.key)) {
+    logSources.set(line.key, {label: line.name, current: false, errors: 0});
+  }
+  // Counts are per run, and nodes dying while we stop them isn't a problem (ros2 launch logs that as an error)
+  var source = logSources.get(line.key);
+  var newRun = source.run !== line.run;
+  source.run = line.run;
+  if (newRun) {
+    source.errors = 0;
+  }
+  if (line.level == LEVEL_ERROR && line.state != "stopping") {
+    source.errors += 1;
+  }
+  if (newRun || line.level == LEVEL_ERROR) {
+    document.querySelectorAll(".launch-error-count").forEach(function (element) {
+      if (element.dataset.logKey == line.key) {
+        showLaunchErrorCount(element);
+      }
+    });
+  }
+  logLines.push(line);
+}
+
+function appendLogLine(line) {
+  addLogLine(line);
+
+  if (logLines.length > LOG_MAX_LINES + 1000) {
+    logLines.splice(0, logLines.length - LOG_MAX_LINES);
+    rebuildLog();
+  } else if (isLogLineShown(line)) {
+    logShown.push(line);
+    if (logSearchRe != null && isLogSearchHit(line)) {
+      logMatches.push(logShown.length - 1);
+    }
+    term.writeln(formatLogLine(line));
+  }
+  queueLogCounts();
+}
+
+function appendLogNotice(msg) {
+  appendLogLine({time: Date.now() / 1000, name: "log", key: null, state: "notice", data: msg});
+}
+
+function isLogSearchHit(line) {
+  return line.plain.search(logSearchRe) >= 0;
+}
+
+function isLogLineShown(line) {
+  return isLogSourceShown(line.key)
+    && line.level >= document.getElementById("log-level").value
+    && (logSearchRe == null || !document.getElementById("log-only-matches").checked || isLogSearchHit(line));
+}
+
+function logLineLabel(line) {
+  return line.key == LOG_LAUNCHER_KEY ? line.name : logSources.get(line.key).label;
+}
+
+function formatLogLine(line) {
+  var prefix = "";
+  if (document.getElementById("log-time").checked) {
+    prefix = "\x1B[2m" + new Date(line.time * 1000).toTimeString().substring(0, 8) + "\x1B[0m ";
+  }
+  if (logLevelColorMap[line.state] != null) {
+    prefix += logLevelColorMap[line.state];
+  }
+  prefix += logLineLabel(line) + ": \x1B[0m";
+
+  var color = LEVEL_COLORS[line.level] || "";
+  if (logSearchRe != null && isLogSearchHit(line)) {
+    // Colors from the line itself are dropped here so the highlight doesn't have to be threaded through them
+    return prefix + color + line.plain.replace(logSearchRe, function (hit) {
+      return SEARCH_HIGHLIGHT + hit + "\x1B[0m" + color;
+    }) + "\x1B[0m";
+  }
+  if (color != "" && line.plain == line.data) {
+    return prefix + color + line.data + "\x1B[0m";
+  }
+  return prefix + line.data;
+}
+
+function rebuildLog() {
+  logShown = logLines.filter(isLogLineShown);
+  logMatches = [];
+  logMatchPos = -1;
+  if (logSearchRe != null) {
+    logShown.forEach(function (line, idx) {
+      if (isLogSearchHit(line)) {
+        logMatches.push(idx);
+      }
+    });
+  }
+
+  // The reset goes through write so that it lands after any rebuild the terminal is still working through
+  var text = "\x1Bc" + logShown.map(function (line) { return formatLogLine(line) + "\n"; }).join("");
+  term.write(text, function () {
+    if (logMatches.length > 0) {
+      goToLogMatch(logMatches.length - 1);  // The newest match is the one you're most likely after
+    }
+  });
+  queueLogCounts();
+}
+
+// Terminal rows where each line of logShown starts. Lines wrap, so this has to be read from the terminal.
+function getLogShownRows() {
+  var buffer = term.buffer.active;
+  var rows = [];
+  var idx = logShown.length - 1;
+  for (var row = buffer.baseY + buffer.cursorY - 1; row >= 0 && idx >= 0; row--) {
+    if (!buffer.getLine(row).isWrapped) {
+      rows[idx--] = row;
     }
   }
+  return rows;
+}
+
+function goToLogMatch(pos) {
+  if (logMatches.length == 0) {
+    return;
+  }
+  logMatchPos = (pos + logMatches.length) % logMatches.length;
+
+  var rows = getLogShownRows();
+  var line = logMatches[logMatchPos];
+  if (rows[line] != null) {
+    var lastRow = rows[line + 1] != null ? rows[line + 1] - 1 : rows[line];
+    term.scrollToLine(Math.max(rows[line] - Math.floor(term.rows / 2), 0));
+    term.selectLines(rows[line], lastRow);
+  }
+  queueLogCounts();
+}
+
+function queueLogCounts() {
+  if (logCountsQueued) {
+    return;
+  }
+  logCountsQueued = true;
+  requestAnimationFrame(function () {
+    logCountsQueued = false;
+    var matchCount = "";
+    if (logSearchRe != null) {
+      matchCount = logMatches.length > 0 ? (logMatchPos + 1) + "/" + logMatches.length : "No matches";
+    }
+    document.getElementById("log-match-count").innerText = matchCount;
+    document.getElementById("log-line-count").innerText = logShown.length + " of " + logLines.length + " lines";
+  });
+}
+
+function logSearchChanged() {
+  var input = document.getElementById("log-search");
+  var text = input.value;
+  var regexForm = text.match(/^\/(.+)\/$/);
+
+  // Plain text by default, since log lines are full of brackets that a regex would trip over
+  logSearchRe = null;
+  input.classList.remove("log-search-invalid");
+  if (text != "") {
+    try {
+      logSearchRe = new RegExp(regexForm != null ? regexForm[1] : text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    } catch (err) {
+      input.classList.add("log-search-invalid");
+    }
+  }
+  rebuildLog();
+}
+
+function saveLog() {
+  var text = logShown.map(function (line) {
+    return new Date(line.time * 1000).toISOString() + " " + logLineLabel(line) + ": " + line.plain + "\n";
+  }).join("");
+
+  var link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([text], {type: "text/plain"}));
+  link.download = "launch-log-" + new Date().toISOString().replace(/[:.]/g, "-") + ".txt";
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function installLogToolbarHooks() {
+  logFilter = JSON.parse(localStorage.log_filter || "{}");
+  var timeCheckbox = document.getElementById("log-time");
+  timeCheckbox.checked = localStorage.log_show_time == "true";
+  timeCheckbox.onchange = function () {
+    localStorage.log_show_time = timeCheckbox.checked;
+    rebuildLog();
+  };
+  document.getElementById("log-only-matches").onchange = rebuildLog;
+  document.getElementById("log-level").onchange = rebuildLog;
+  document.getElementById("log-prev").onclick = function () { goToLogMatch(logMatchPos - 1); };
+  document.getElementById("log-next").onclick = function () { goToLogMatch(logMatchPos + 1); };
+  document.getElementById("log-save").onclick = saveLog;
+  document.getElementById("log-all").onclick = function () { setAllLogSourcesShown(true); };
+  document.getElementById("log-none").onclick = function () { setAllLogSourcesShown(false); };
+
+  // Wait for a pause in typing since this rebuilds the whole log
+  var searchInput = document.getElementById("log-search");
+  var searchTimer = null;
+  searchInput.oninput = function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(logSearchChanged, 150);
+  };
+  searchInput.onkeydown = function (e) {
+    if (e.key == "Enter") {
+      goToLogMatch(logMatchPos + (e.shiftKey ? -1 : 1));
+    } else if (e.key == "Escape") {
+      searchInput.value = "";
+      searchInput.blur();
+      logSearchChanged();
+    }
+  };
+
+  // The browser's find can't see into the terminal
+  document.addEventListener("keydown", function (e) {
+    var logOpen = document.querySelector(".terminal-container").style.display != "none";
+    if (logOpen && (e.ctrlKey || e.metaKey) && e.key == "f") {
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    }
+  });
 }
 
 // ========================================
@@ -572,28 +890,13 @@ function launchSelected() {
 
 function logByDefaultChanged() {
   var checkbox = document.getElementById('log-default-checkbox');
-  checkbox.disabled = true;
+  localStorage.logging_enable_default = JSON.stringify(checkbox.checked);
 
-  // Disable all other checkboxes as well since this will refresh them all
-  var launchCheckboxes = document.querySelectorAll(".log-checkbox-input");
-  for (var i = 0; i < launchCheckboxes.length; i++) {
-    launchCheckboxes[i].disabled = true;
-  }
-
-  ws.send(JSON.stringify({
-    cmd: "set_logdefault",
-    enable: checkbox.checked
-  }));
-}
-
-function logCheckboxChanged(launchId) {
-  var checkbox = document.getElementById(`launchentry-${launchId}-log-en`);
-  checkbox.disabled = true;
-  ws.send(JSON.stringify({
-    cmd: "set_logenable",
-    id: launchId,
-    enable: checkbox.checked
-  }));
+  // Everything goes back to following the default
+  logFilter = {};
+  localStorage.log_filter = JSON.stringify(logFilter);
+  updateLogCheckboxes();
+  rebuildLog();
 }
 
 // ========================================
@@ -608,8 +911,9 @@ function websocketConnect() {
       cmd: "connect",
       // Pull the last used launch file from local storage to reduce button clicks when loading the page
       last_launchfile: localStorage.last_launchfile,
-      // If the websocket should be enrolled in logging by default
-      logging_enable_default: JSON.parse(localStorage.logging_enable_default)  // Gaurenteed to be set in onload
+      // Logs are filtered here rather than on the server, so filters also apply to lines that are already received
+      logging_enable_default: true,
+      log_history: true
     }));
     errorShown = false;
   };
@@ -627,15 +931,7 @@ function websocketConnect() {
         alert("Error: " + msg.msg);
       }
       else if (msg.type === "log") {
-        var prefix = "";
-        if (logLevelColorMap[msg.state] != null) {
-          prefix = logLevelColorMap[msg.state];
-        }
-        prefix += msg.name + ": \x1B[0m"
-        term.writeln(prefix + msg.data);
-      }
-      else if (msg.type == "log_enrollment") {
-        logEnrollmentCallback(msg);
+        appendLogLine(msg);
       }
       else {
         throw new Error("Unexpected Message Type: " + msg.type);
@@ -649,7 +945,7 @@ function websocketConnect() {
 
   ws.onclose = function(e) {
     showCriticalError("Connection Lost");
-    term.writeln("\x1b[1;33m<Launch Log Ended: Connection Closed>\x1b[0m");
+    appendLogNotice("<Launch Log Ended: Connection Closed>");
   };
 }
 
@@ -746,7 +1042,8 @@ window.onload = function () {
   // Initialize Terminal
   installTerminalResizeHooks(logDefaultCheckbox.checked);
   term.open(document.getElementById('terminal'));
-  term.writeln("\x1b[1;33m<Launch Log Started>\x1b[0m");
+  installLogToolbarHooks();
+  appendLogNotice("<Launch Log Started>");
 
   // Connect to the websocket
   websocketConnect();

@@ -64,6 +64,27 @@
     <div class="terminal-container" style="display: none">
       <div class="term-resize-bar"></div>
       <button class="termclose-btn">&times;</button>
+      <div class="log-controls">
+        <span class="log-title">Launch Log</span>
+        <input id="log-search" type="search" placeholder="Search, or /regex/" spellcheck="false" autocomplete="off" />
+        <span id="log-match-count"></span>
+        <button id="log-prev" title="Previous match (Shift+Enter)">Prev</button>
+        <button id="log-next" title="Next match (Enter)">Next</button>
+        <label class="log-default-label"><input type="checkbox" id="log-only-matches" /> Only matches</label>
+        <select id="log-level">
+          <option value="0">All</option>
+          <option value="1">Warn+</option>
+          <option value="2">Errors</option>
+        </select>
+        <label class="log-default-label"><input type="checkbox" id="log-time" /> Time</label>
+        <span class="log-launch-buttons">
+          Launches:
+          <button id="log-all" title="Show every launch in the log">All</button>
+          <button id="log-none" title="Hide every launch from the log">None</button>
+        </span>
+        <button id="log-save" title="Download the lines currently shown">Save</button>
+        <span id="log-line-count"></span>
+      </div>
       <div id="terminal" class="terminal-view"></div>
     </div>
   </div>
